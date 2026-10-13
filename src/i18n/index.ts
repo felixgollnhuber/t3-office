@@ -18,15 +18,12 @@ export type Lang = (typeof LANGS)[number]['id'];
 const KEY = 'office.lang';
 const known = (x: string | null | undefined): x is Lang => LANGS.some((l) => l.id === x);
 
+/** ?lang= for this page view, else the language picked in the HUD or the settings, else English (the browser's language is not consulted) */
 function detect(): Lang {
   const q = new URLSearchParams(location.search).get('lang');
   if (known(q)) return q;
   const stored = localStorage.getItem(KEY);
   if (known(stored)) return stored;
-  for (const n of navigator.languages ?? [navigator.language]) {
-    const id = n.toLowerCase().split('-')[0];
-    if (known(id)) return id;
-  }
   return 'en';
 }
 
