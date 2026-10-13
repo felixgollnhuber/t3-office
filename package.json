@@ -1,0 +1,67 @@
+{
+  "name": "t3-office",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A pixel-art office that shows what your T3 Code agents are doing, live.",
+  "keywords": [
+    "t3-code",
+    "agents",
+    "dashboard",
+    "three.js",
+    "pixel-art",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "visualization",
+    "vite"
+  ],
+  "homepage": "https://github.com/felixgollnhuber/t3-office#readme",
+  "bugs": {
+    "url": "https://github.com/felixgollnhuber/t3-office/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/felixgollnhuber/t3-office.git"
+  },
+  "author": "Felix Gollnhuber",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "t3-office": "bin/t3-office.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "server",
+    "public",
+    "index.html",
+    "vite.config.ts",
+    "tsconfig.json",
+    "tsconfig.node.json"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node bin/t3-office.mjs --build",
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p . && tsc -p tsconfig.node.json",
+    "add-set": "node scripts/add-set.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/bitcount-prop-single": "^5.3.0",
+    "@fontsource/pixelify-sans": "^5.3.0",
+    "@fontsource/silkscreen": "^5.3.0",
+    "@fontsource/vt323": "^5.3.0",
+    "three": "^0.186.1",
+    "vite": "^8.3.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/three": "^0.186.0",
+    "playwright": "^1.64.0",
+    "typescript": "^7.0.2"
+  }
+}

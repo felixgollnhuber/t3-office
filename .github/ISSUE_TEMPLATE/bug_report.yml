@@ -1,0 +1,61 @@
+name: Bug report
+description: Something in the office is broken or behaves strangely
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time! In live mode the office shows your real thread names, prompts and costs.
+        Please reproduce with `?source=demo` if you can, or blur private details before you attach a screenshot.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the office with `npm start`
+        2. Open http://localhost:5173/?source=demo&theme=boiler
+        3. Click the DJ booth
+        4. …
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Data
+      options:
+        - Live data from T3 Code
+        - Demo data (?source=demo)
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 'main @ 1a2b3c4, or "npx, today"'
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Operating system, browser, Node.js version (`node -v`) and, for live data, the T3 Code version.
+      placeholder: macOS 26, Chrome 141, Node 24.10, T3 Code 0.0.40
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output
+      description: Errors from the browser console or the terminal that runs the office, if any.
+      render: text
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots or a clip
+      description: Demo data only, please.

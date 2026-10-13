@@ -1,0 +1,261 @@
+/** Texts of the cost receipt (src/costview.ts), plus the number formats only the receipt needs. */
+import { date, locale, num, pct as percent, usd as dollars } from './index';
+
+export const S = locale({
+  en: {
+    // header
+    kicker: 'T3 Code · Usage',
+    title: 'Receipt',
+    printer: 'T3 · Register 01',
+    range24h: '24 h',
+    range7d: '7 days',
+    range30d: '30 days',
+    range90d: '90 days',
+    metricCost: '$ Cost',
+    metricTokens: 'Σ Tokens',
+    keyHint: (key: string) => `Key ${key}`,
+    refresh: 'refresh',
+    close: 'close (Esc)',
+    // loading and errors
+    printing: 'Printing receipt',
+    printingSub: 'reading provider transcripts the way T3 Code does …',
+    printFailed: "Couldn't print the receipt",
+    errCosts: (detail: string) => `Couldn't read costs: ${detail}`,
+    errThreads: (detail: string) => `Couldn't read T3 threads: ${detail}`,
+    errNoDb: 'T3 database not found',
+    // period line
+    day: (d: Date) => date(d, { weekday: 'short', month: 'short', day: 'numeric' }),
+    dayShort: (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`,
+    hour: (hhmm: string) => hhmm,
+    period: (from: string, to: string) => `${from} – ${to}`,
+    periodHours: (from: string, to: string) => `${from} yesterday – ${to} today`,
+    demoStamp: 'Demo data',
+    demoRest: 'without T3',
+    asOf: (time: string) => `as of ${time}`,
+    scan: (time: string) => `T3 scan ${time}`,
+    liveFiles: (n: string) => ` + ${n} live transcripts`,
+    busy: 'printing …',
+    // total and providers
+    totalCost: (n: string, one: boolean) => `${n} ${one ? 'session' : 'sessions'} · API estimate`,
+    totalTokens: (n: string, one: boolean) => `${n} ${one ? 'session' : 'sessions'} · processed`,
+    unpriced: 'unpriced',
+    unpricedShare: (share: string) => `${share} unpriced`,
+    unpricedTitle: (share: string) => `unpriced: ${share} of entries`,
+    sessions: (n: string, one: boolean) => `${n} ${one ? 'session' : 'sessions'}`,
+    shareOfCost: (share: string, tokens: string) => `${share} of cost · ${tokens} tokens`,
+    shareOfTokens: (share: string, cost: string) => `${share} of tokens · ${cost}`,
+    none: 'No activity in this period.',
+    // chart
+    chartDailyCost: 'Daily cost by provider',
+    chartHourlyCost: 'Hourly cost by provider',
+    chartDailyTokens: 'Daily tokens processed by provider',
+    chartHourlyTokens: 'Hourly tokens processed by provider',
+    // totals
+    sums: 'Totals',
+    processedTokens: 'Processed tokens',
+    cachedInput: 'Cached input',
+    uncachedInput: 'Uncached input',
+    output: 'Output',
+    cacheSavings: 'Cache savings',
+    // splits
+    tokensByType: 'Tokens by type',
+    costByType: 'Cost by type',
+    costBySpeed: 'Cost by speed',
+    input: 'Input',
+    cacheRead: 'Cache read',
+    cacheWrite: 'Cache write',
+    other: 'Other',
+    speedStandard: 'Standard',
+    speedFast: 'Fast',
+    speedUltrafast: 'Ultrafast',
+    surcharge: 'Surcharge',
+    // breakdown
+    breakdown: 'Breakdown',
+    tabModel: 'Model',
+    tabDay: 'Day',
+    tabHour: 'Hour',
+    tabProject: 'Project',
+    tabThreads: 'Threads',
+    colModel: 'Model',
+    colCost: 'Cost',
+    colShare: 'Share',
+    colTokens: 'Tokens',
+    colPerMillion: '$ / 1M',
+    colCacheHit: 'Cache hits',
+    colProject: 'Project',
+    colThreads: 'Threads',
+    colThread: 'Thread',
+    colTurns: 'Turns',
+    t3Note: (threads: string, cost: string, total: string) =>
+      `Only threads that ran in T3 Code: ${threads} threads · ${cost} of ${total}. Work done straight in the terminal counts in the totals above but has no project here.`,
+    noThreads: 'No T3 threads in this period.',
+    openInT3: 'open in T3',
+    untitled: 'Untitled',
+    unknownProject: 'Unknown',
+    // footer
+    footTotal: 'Total',
+    footFast: 'incl. Fast surcharge',
+    footCoffee: (price: string) => `in flat whites at ${price}`,
+    footEstimate: 'Estimate at API list prices · subscriptions are billed separately',
+    footDemo: 'Demo receipt: T3 Code is not connected',
+    footSource: 'Source: provider transcripts as in T3 Code · prices from LiteLLM',
+    thanks: '*** Thank you for your tokens! ***',
+    // compact numbers
+    thousand: (v: string) => `${v}K`,
+    million: (v: string) => `${v}M`,
+    billion: (v: string) => `${v}B`,
+    trillion: (v: string) => `${v}T`,
+    lessThan: (v: string) => `<${v}`,
+    // demo receipt
+    demoProjects: ['Agent Office', 'Website relaunch', 'Data pipeline', 'Mobile app', 'Scratch'],
+    demoThreads: [
+      'Pixel office: receipt view',
+      'Refactor the checkout flow',
+      'Move ETL to Parquet',
+      'Push notifications',
+      'Write release notes',
+      'Hunt flaky tests',
+      'Dark mode for settings',
+      'API rate limits',
+      'Onboarding copy',
+      'Speed up CSV import',
+    ],
+  },
+  de: {
+    kicker: 'T3 Code · Nutzung',
+    title: 'Kassenbon',
+    printer: 'T3 · Kasse 01',
+    range24h: '24 Std',
+    range7d: '7 Tage',
+    range30d: '30 Tage',
+    range90d: '90 Tage',
+    metricCost: '$ Kosten',
+    metricTokens: 'Σ Tokens',
+    keyHint: (key: string) => `Taste ${key}`,
+    refresh: 'neu einlesen',
+    close: 'schließen (Esc)',
+    printing: 'Drucke Bon',
+    printingSub: 'lese Provider-Transkripte wie T3 Code …',
+    printFailed: 'Bon konnte nicht gedruckt werden',
+    errCosts: (detail: string) => `Kosten nicht lesbar: ${detail}`,
+    errThreads: (detail: string) => `T3-Threads nicht lesbar: ${detail}`,
+    errNoDb: 'T3-Datenbank nicht gefunden',
+    day: (d: Date) => `${['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.`,
+    dayShort: (d: Date) => `${d.getDate()}.${d.getMonth() + 1}.`,
+    hour: (hhmm: string) => `${hhmm} Uhr`,
+    period: (from: string, to: string) => `${from} – ${to}`,
+    periodHours: (from: string, to: string) => `${from} gestern – ${to} heute`,
+    demoStamp: 'Demo-Daten',
+    demoRest: 'ohne T3',
+    asOf: (time: string) => `Stand ${time}`,
+    scan: (time: string) => `T3-Scan ${time}`,
+    liveFiles: (n: string) => ` + ${n} Transkripte live`,
+    busy: 'druckt …',
+    totalCost: (n: string) => `${n} Sessions · API-Schätzung`,
+    totalTokens: (n: string) => `${n} Sessions · verarbeitet`,
+    unpriced: 'ohne Preis',
+    unpricedShare: (share: string) => `${share} ohne Preis`,
+    unpricedTitle: (share: string) => `ohne Preis: ${share} der Einträge`,
+    sessions: (n: string, one: boolean) => `${n} ${one ? 'Session' : 'Sessions'}`,
+    shareOfCost: (share: string, tokens: string) => `${share} der Kosten · ${tokens} Tokens`,
+    shareOfTokens: (share: string, cost: string) => `${share} der Tokens · ${cost}`,
+    none: 'Keine Aktivität in diesem Zeitraum.',
+    chartDailyCost: 'Tägliche Kosten nach Provider',
+    chartHourlyCost: 'Stündliche Kosten nach Provider',
+    chartDailyTokens: 'Tägliche verarbeitete Tokens nach Provider',
+    chartHourlyTokens: 'Stündliche verarbeitete Tokens nach Provider',
+    sums: 'Summen',
+    processedTokens: 'Verarbeitete Tokens',
+    cachedInput: 'Cache-Input',
+    uncachedInput: 'Ungecachter Input',
+    output: 'Output',
+    cacheSavings: 'Cache-Ersparnis',
+    tokensByType: 'Tokens nach Typ',
+    costByType: 'Kosten nach Typ',
+    costBySpeed: 'Kosten nach Tempo',
+    input: 'Input',
+    cacheRead: 'Cache lesen',
+    cacheWrite: 'Cache schreiben',
+    other: 'Sonstiges',
+    speedStandard: 'Standard',
+    speedFast: 'Fast',
+    speedUltrafast: 'Ultrafast',
+    surcharge: 'Aufpreis',
+    breakdown: 'Aufschlüsselung',
+    tabModel: 'Modell',
+    tabDay: 'Tag',
+    tabHour: 'Stunde',
+    tabProject: 'Projekt',
+    tabThreads: 'Threads',
+    colModel: 'Modell',
+    colCost: 'Kosten',
+    colShare: 'Anteil',
+    colTokens: 'Tokens',
+    colPerMillion: '$ / 1 Mio',
+    colCacheHit: 'Cache-Treffer',
+    colProject: 'Projekt',
+    colThreads: 'Threads',
+    colThread: 'Thread',
+    colTurns: 'Turns',
+    t3Note: (threads: string, cost: string, total: string) =>
+      `Nur Threads, die in T3 Code liefen: ${threads} Threads · ${cost} von ${total}. Arbeit direkt im Terminal zählt oben mit, hat hier aber kein Projekt.`,
+    noThreads: 'Keine T3-Threads in diesem Zeitraum.',
+    openInT3: 'in T3 öffnen',
+    untitled: 'Ohne Titel',
+    unknownProject: 'Unbekannt',
+    footTotal: 'Summe',
+    footFast: 'davon Fast-Aufpreis',
+    footCoffee: (price: string) => `in Flat Whites à ${price}`,
+    footEstimate: 'API-Listenpreise als Schätzung · Abos rechnen separat ab',
+    footDemo: 'Demo-Bon: T3 Code ist nicht verbunden',
+    footSource: 'Quelle: Provider-Transkripte wie in T3 Code · Preise LiteLLM',
+    thanks: '*** Danke für Ihre Tokens! ***',
+    thousand: (v: string) => `${v} Tsd`,
+    million: (v: string) => `${v} Mio`,
+    billion: (v: string) => `${v} Mrd`,
+    trillion: (v: string) => `${v} Bio`,
+    lessThan: (v: string) => `<${v}`,
+    demoProjects: ['Agent Office', 'Website-Relaunch', 'Datenpipeline', 'Mobile-App', 'Scratch'],
+    demoThreads: [
+      'Pixel-Büro: Kassenbon-Ansicht',
+      'Checkout-Flow refactoren',
+      'ETL nach Parquet umstellen',
+      'Push-Benachrichtigungen',
+      'Release-Notes schreiben',
+      'Flaky Tests jagen',
+      'Dark-Mode für Settings',
+      'API-Rate-Limits',
+      'Onboarding-Texte',
+      'CSV-Import beschleunigen',
+    ],
+  },
+});
+
+/** Intl puts no-break spaces before "$" and "%"; the receipt is set in plain spaces. */
+const plain = (s: string) => s.replace(/[  ]/g, ' ');
+const DECIMAL = num(1.5, 1).charAt(1);
+
+/** "$15,259.53" / "15.259,53 $"; amounts below a cent read "<$0.01" / "<0,01 $" */
+export function money(n: number) {
+  return n > 0 && n < 0.005 ? S.lessThan(plain(dollars(0.01))) : plain(dollars(n));
+}
+
+/** 0.565 → "56.5%" / "56,5 %"; below a tenth of a percent "<0.1%" / "<0,1 %" */
+export function share(frac: number) {
+  return frac > 0 && frac < 0.001 ? S.lessThan(plain(percent(0.001, 1))) : plain(percent(frac, 1));
+}
+
+/** Compact counts with three significant digits: 47_400_000_000 → "47.4B" / "47,4 Mrd", 613_000_000 → "613M" / "613 Mio" */
+export function compact(n: number) {
+  const a = Math.abs(n);
+  const f = (v: number) => {
+    const s = num(v, v >= 100 ? 0 : v >= 10 ? 1 : 2);
+    const cut = s.lastIndexOf(DECIMAL);
+    return cut >= 0 && /^0+$/.test(s.slice(cut + 1)) ? s.slice(0, cut) : s;
+  };
+  if (a >= 1e12) return S.trillion(f(n / 1e12));
+  if (a >= 1e9) return S.billion(f(n / 1e9));
+  if (a >= 1e6) return S.million(f(n / 1e6));
+  if (a >= 1e3) return S.thousand(f(n / 1e3));
+  return num(n);
+}

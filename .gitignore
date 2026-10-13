@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+*.tgz
+vite.config.ts.timestamp-*
+
+# your own pinboard projects (copy office.config.example.json)
+office.config.json
+
+# screenshots from visual checks; they show real thread names and costs
+shots/
+# throwaway browser scripts used while developing
+scripts/dev/

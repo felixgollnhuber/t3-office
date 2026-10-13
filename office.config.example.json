@@ -1,0 +1,7 @@
+{
+  "github": {
+    "projects": [
+      { "owner": "your-github-login-or-org", "number": 1 }
+    ]
+  }
+}

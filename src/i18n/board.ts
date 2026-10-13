@@ -1,0 +1,56 @@
+import { locale } from './index';
+
+/** Texts of board.ts: the pinboard close-up and its demo notes. */
+export const S = locale({
+  en: {
+    title: 'Pinboard',
+    hideDone: 'Hide done',
+    showDone: 'Show done',
+    loading: 'loading…',
+    back: 'back (Esc)',
+    demoHint: 'Demo notes · add your GitHub Projects to <code>office.config.json</code>',
+    draft: 'Draft',
+    noStatus: 'No status',
+    projectNotFound: (ref: string) => `Project ${ref} not found`,
+    agoSeconds: (n: number) => `${n} s ago`,
+    agoMinutes: (n: number) => `${n} min ago`,
+    agoHours: (n: number) => `${n} h ago`,
+    agoDays: (n: number) => `${n} d ago`,
+    // titles of the eight demo notes, in board order
+    demoNotes: [
+      'Hook up real T3 threads',
+      'Deep link into the thread',
+      'Read quotas live from T3',
+      'More Boiler Room sets',
+      'Pinboard with GitHub Projects',
+      'Weather with thunderstorms',
+      'Desks set up automatically',
+      'Lo-fi radio with likes',
+    ],
+  },
+  de: {
+    title: 'Pinnwand',
+    hideDone: 'Done ausblenden',
+    showDone: 'Done zeigen',
+    loading: 'lädt…',
+    back: 'zurück (Esc)',
+    demoHint: 'Demo-Zettel · trag GitHub Projects in <code>office.config.json</code> ein',
+    draft: 'Entwurf',
+    noStatus: 'Ohne Status',
+    projectNotFound: (ref: string) => `Project ${ref} nicht gefunden`,
+    agoSeconds: (n: number) => `vor ${n} s`,
+    agoMinutes: (n: number) => `vor ${n} min`,
+    agoHours: (n: number) => `vor ${n} h`,
+    agoDays: (n: number) => `vor ${n} d`,
+    demoNotes: [
+      'Echte T3-Threads anbinden',
+      'Deep-Link in den Thread',
+      'Kontingente live aus T3 lesen',
+      'Mehr Boiler-Room-Sets',
+      'Pinnwand mit GitHub Projects',
+      'Wetter mit Gewitter',
+      'Schreibtische automatisch',
+      'Lo-fi-Radio mit Likes',
+    ],
+  },
+});

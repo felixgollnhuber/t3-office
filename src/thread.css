@@ -1,0 +1,60 @@
+/* The agent sheet's tabs and the thread reader (agentview.ts): the conversation as pixel chat. */
+.agent-view .part { display: contents; }
+.focus-view.dock.agent-view.reading { width: min(470px, 44vw); }
+
+.agent-view .sheet-tabs { display: flex; gap: 0; border-bottom: 3px solid var(--edge); margin-bottom: -2px; flex: none; }
+.agent-view .sheet-tabs button { font: 9px "Silkscreen", sans-serif; letter-spacing: 0.14em; text-transform: uppercase; padding: 7px 12px 6px; border: 2px solid transparent; border-bottom: 0; color: var(--muted); }
+.agent-view .sheet-tabs button:hover { color: var(--ink); border-color: transparent; }
+.agent-view .sheet-tabs button.on { color: var(--paper); background: var(--edge); border-color: var(--edge); }
+
+.agent-view .thread { position: relative; flex: 1; min-height: 120px; display: flex; flex-direction: column; }
+.agent-view .thread-scroll {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 8px 4px 0;
+  scrollbar-width: thin; scrollbar-color: var(--muted) transparent;
+}
+.agent-view .thread ol { list-style: none; display: flex; flex-direction: column; gap: 10px; min-height: 100%; justify-content: flex-end; }
+
+/* messages: the user on the right in ink, the agent on the left on paper with its provider colour */
+.agent-view .t-msg { display: flex; flex-direction: column; gap: 3px; max-width: 94%; }
+.agent-view .t-user { align-self: flex-end; align-items: flex-end; }
+.agent-view .t-who { display: flex; align-items: baseline; gap: 8px; }
+.agent-view .t-who b { font: 8px "Silkscreen", sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.agent-view .thread time { font: 15px "VT323", monospace; color: var(--muted); font-variant-numeric: tabular-nums; }
+.agent-view .t-text {
+  font-size: 16px; line-height: 1.32; white-space: pre-wrap; overflow-wrap: anywhere; padding: 7px 10px 8px;
+  border: 2px solid var(--edge); box-shadow: 3px 3px 0 var(--shadow);
+}
+.agent-view .t-bot .t-text { border-left: 6px solid var(--acc); background: color-mix(in oklch, var(--paper) 88%, var(--ink)); }
+.agent-view .t-user .t-text { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.agent-view .t-user.by-agent .t-text { background: color-mix(in oklch, var(--ink) 62%, var(--paper)); border-style: dashed; border-color: var(--paper); outline: 2px solid color-mix(in oklch, var(--ink) 62%, var(--paper)); }
+.agent-view .t-text code, .agent-view .t-text pre { font: 18px/1.1 "VT323", monospace; }
+.agent-view .t-text code { padding: 0 3px; background: color-mix(in oklch, currentColor 14%, transparent); }
+.agent-view .t-text pre { white-space: pre-wrap; margin: 4px 0; padding: 5px 7px; background: color-mix(in oklch, currentColor 10%, transparent); border-left: 2px solid currentColor; }
+.agent-view .t-more { display: block; margin-top: 6px; font-size: 14px; opacity: 0.7; }
+
+/* tool calls: one terminal line each, a run of them reads as one block */
+.agent-view .t-tools { display: flex; flex-direction: column; gap: 1px; padding: 5px 0 5px 9px; border-left: 2px dashed color-mix(in oklch, var(--muted) 70%, transparent); }
+.agent-view .t-tools p { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; font: 17px/1.15 "VT323", monospace; color: var(--muted); }
+.agent-view .t-tools p span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent-view .t-tools p i { width: 8px; height: 8px; background: #8a8f9c; }
+.agent-view .t-tools p em { font: 7px "Silkscreen", sans-serif; letter-spacing: 0.1em; text-transform: uppercase; font-style: normal; padding: 2px 4px; }
+.agent-view .t-tools .k-terminal i { background: #3fbf7f; }
+.agent-view .t-tools .k-search i { background: #4f9fd8; }
+.agent-view .t-tools .k-edit i { background: #e8a92a; }
+.agent-view .t-tools .k-web i { background: #9b6fd8; }
+.agent-view .t-tools .k-test i { background: #6fbf3f; }
+.agent-view .t-tools .s-failed span { color: #d9423b; }
+.agent-view .t-tools .s-failed em { background: #d9423b; color: #fff; }
+.agent-view .t-tools .s-running { color: var(--ink); }
+.agent-view .t-tools .s-running i { animation: blink 0.9s steps(2) infinite; }
+.agent-view .t-tools .s-running em { background: var(--ink); color: var(--paper); }
+
+.agent-view .t-note, .agent-view .t-day { display: flex; align-items: center; gap: 8px; font: 8px "Silkscreen", sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.agent-view .t-note::before, .agent-view .t-note::after, .agent-view .t-day::before, .agent-view .t-day::after { content: ''; flex: 1; border-top: 2px dashed color-mix(in oklch, var(--muted) 60%, transparent); }
+.agent-view .t-note.t-err { color: #d9423b; align-items: flex-start; text-transform: none; letter-spacing: 0; font: 16px/1.25 "Bitcount Prop Single", sans-serif; padding: 6px 9px; border: 2px solid #d9423b; background: color-mix(in oklch, #d9423b 14%, transparent); }
+.agent-view .t-note.t-err::before, .agent-view .t-note.t-err::after { content: none; }
+.agent-view .t-note.t-err span { flex: 1; overflow-wrap: anywhere; }
+.agent-view .t-empty { align-self: center; margin: auto 0; font-size: 16px; color: var(--muted); text-align: center; }
+
+.agent-view .thread-jump { position: absolute; right: 14px; bottom: 8px; display: none; font-size: 15px; padding: 2px 9px; background: var(--paper); border-color: var(--edge); box-shadow: 3px 3px 0 var(--shadow); }
+.agent-view .thread-jump.on { display: block; }

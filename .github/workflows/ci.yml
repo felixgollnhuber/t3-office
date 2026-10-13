@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.13 is the oldest Node with node:sqlite unflagged
+        node: ['22.13', '24', '26']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Type check and build
+        run: npm run build
+      - name: Smoke test
+        # the built office must come up with its API; without T3 Code on the runner /api/t3/status answers 503
+        run: |
+          node bin/t3-office.mjs --no-open &
+          for i in $(seq 1 30); do curl -sf http://localhost:5173/ > /dev/null && break; sleep 1; done
+          curl -sf http://localhost:5173/ | grep -q '<canvas id="scene">'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/api/t3/status)" = 503
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/api/board)" = 200
+
+  # the one check the ruleset on main requires, so the Node matrix can change without touching the ruleset
+  passed:
+    name: CI passed
+    if: always()
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ needs.build.result }}" = success

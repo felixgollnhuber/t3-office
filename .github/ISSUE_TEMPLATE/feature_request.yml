@@ -1,0 +1,28 @@
+name: Idea
+description: Something the office should show, do or have
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What should happen in the office? Pixel sketches are very welcome.
+      placeholder: When an agent's tests fail three times in a row, it walks to the coffee machine and stares at it for a while.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What would it tell you at a glance, or why would it be fun?
+  - type: textarea
+    id: data
+    attributes:
+      label: Where the data comes from
+      description: If the idea needs information from T3 Code, where could it come from? Leave empty if you are not sure.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to build this myself (see CONTRIBUTING.md)
