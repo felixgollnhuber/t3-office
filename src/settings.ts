@@ -10,6 +10,9 @@ import { LANGS, lang, setLang, type Lang } from './i18n';
  *
  * URL parameters (?theme=, ?lat=, ?weather=, ?director=1 …) win over stored values for that page view and are not
  * written back. Changing such a setting in the menu drops the override again.
+ *
+ * Phones start in a cinema mode (no panels, director camera, quiet name tags). That is a default for the device, not a
+ * stored choice: a URL parameter like ?kiosk=0 or a value from the menu still wins.
  */
 
 export const THEME_IDS = ['loft', 'campus', 'soma', 'boiler'] as const;
@@ -65,6 +68,8 @@ export interface Settings {
 export type SettingKey = keyof Settings;
 
 const reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** a phone or another small touch screen: no room for the panels next to the office */
+export const phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
 
 export const DEFAULTS: Readonly<Settings> = {
   language: lang,
@@ -139,6 +144,8 @@ const URL_PARAMS: { [K in SettingKey]?: { name: string; parse: (s: string) => un
 };
 
 type Stored = { [K in SettingKey]?: Settings[K] };
+/** what this device starts with in place of DEFAULTS; never stored */
+const DEVICE: Stored = phone ? { kiosk: true, director: true, tags: 'quiet' } : {};
 type Listener<K extends SettingKey> = (value: Settings[K], key: K) => void;
 
 function load(): Stored {
@@ -186,7 +193,7 @@ class SettingsStore {
 
   get<K extends SettingKey>(key: K): Settings[K] {
     if (key === 'language') return lang as Settings[K];
-    return (this.url[key] ?? this.stored[key] ?? DEFAULTS[key]) as Settings[K];
+    return (this.url[key] ?? this.stored[key] ?? DEVICE[key] ?? DEFAULTS[key]) as Settings[K];
   }
 
   /** true while a URL parameter decides this setting */
@@ -225,7 +232,7 @@ class SettingsStore {
     return () => void this.anyFns.delete(fn);
   }
 
-  /** Back to the defaults (the language stays). */
+  /** Back to the defaults of this device (the language stays). */
   reset() {
     const theme = this.get('theme');
     const before = { ...this.all() };

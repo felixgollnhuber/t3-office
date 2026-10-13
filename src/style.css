@@ -728,3 +728,43 @@ body[data-theme='boiler'] #settings .st-panel { font-family: "Bitcount Prop Sing
 @media (max-width: 700px) { #settings .st-cols { columns: 1; } }
 @media (max-height: 800px) { #settings { padding: 12px; } #settings header { padding-top: 10px; padding-bottom: 6px; } #settings h2 { font-size: 22px; } }
 @media (prefers-reduced-motion: reduce) { #settings, #settings .st-panel { animation: none; } }
+
+/* ---------- phones: cinema mode (src/settings.ts), the demo bar, the agent sheet from below ---------- */
+/* a finger on the office moves the camera, it does not scroll or zoom the page */
+#scene { touch-action: none; }
+.demobar {
+  position: fixed; z-index: 4; bottom: calc(10px + env(safe-area-inset-bottom));
+  left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right));
+  display: grid; grid-template: 'p x' 'a a' / 1fr auto; align-items: center; gap: 8px 12px;
+  padding: 9px 10px 10px 12px; background: var(--paper); border: 3px solid var(--edge); box-shadow: 5px 5px 0 var(--shadow);
+  font-size: 16px; line-height: 1.15;
+}
+.demobar p { grid-area: p; }
+.demobar b { display: block; margin-bottom: 2px; font: 12px "Silkscreen", sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+.demobar .btn {
+  grid-area: a; padding: 7px 10px; text-align: center; text-decoration: none; font-size: 17px;
+  background: var(--ink); color: var(--paper); box-shadow: 3px 3px 0 var(--shadow);
+}
+.demobar .btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
+.demobar .x { grid-area: x; align-self: start; width: 30px; height: 30px; font: inherit; font-size: 20px; line-height: 1; color: var(--ink); background: transparent; border: 2px solid var(--muted); }
+@media (orientation: landscape) {
+  .demobar { grid-template: 'p a x' / 1fr auto auto; padding: 7px 8px 7px 12px; }
+  .demobar b { display: inline; margin: 0 6px 0 0; }
+}
+
+body.phone .focus-view:not(.dock) {
+  inset: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+}
+@media (orientation: portrait) {
+  body.phone .focus-view.dock, body.phone .focus-view.dock.agent-view.reading {
+    left: 8px; right: 8px; top: auto; bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; height: 56%;
+  }
+  body.phone .agent-view { animation-name: sheet-up; }
+}
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } }
+@media (orientation: landscape) {
+  /* main.ts keeps the person in the left half */
+  body.phone .focus-view.dock, body.phone .focus-view.dock.agent-view.reading {
+    top: 8px; bottom: 8px; right: max(8px, env(safe-area-inset-right)); width: calc(50% - 8px);
+  }
+}

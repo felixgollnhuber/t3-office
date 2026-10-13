@@ -87,9 +87,10 @@ src/
   agentview.ts       The agent sheet you get by clicking someone, with the thread reader
   costview.ts        The receipt and the full cost view
   quota.ts board.ts  The quota wall and the GitHub Projects pinboard
-  settings.ts        One typed settings store (localStorage + URL overrides)
+  settings.ts        One typed settings store (localStorage + URL overrides, phone defaults)
   settingsmenu.ts    The settings menu
   interact.ts        Registry for clickable things
+  demobar.ts         The bar of the public demo on phones, linking back to the repository
   i18n/              Every text, one table per area, one block per language
 
 scripts/             add-set.mjs and analyze-set.mjs for the DJ booth
