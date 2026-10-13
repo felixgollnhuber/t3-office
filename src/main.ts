@@ -25,11 +25,12 @@ import { CostView } from './costview';
 import type { Desk } from './desk';
 import type { Provider } from './data';
 import { S as TXT } from './i18n/app';
-import { settings, type ThemeId } from './settings';
+import { phone, settings, type ThemeId } from './settings';
 import { SettingsMenu } from './settingsmenu';
 import { resolveSeason, type SeasonKind } from './seasons';
 import { Director, stage, type CameraRig, type XZ } from './director';
 import { clickables, hintOf, pickClickable, type Clickable } from './interact';
+import { showDemoBar } from './demobar';
 
 async function main() {
   const params = new URLSearchParams(location.search);
@@ -206,6 +207,8 @@ async function main() {
     },
   ];
   let agentId = '';
+  /** on an upright phone the agent sheet comes up from the bottom instead of docking at the side (style.css) */
+  const sheetBelow = () => phone && window.innerHeight >= window.innerWidth;
   let previewDesk: Desk | null = null;
   let agentT = 0;
   const shot = new THREE.Vector3();
@@ -236,9 +239,17 @@ async function main() {
         shot.set(p.x, 0, p.z).lerp(sp, 0.85);
         shot.y = sp.y - 0.05;
       }
-      // keep the person left of the docked sheet
       const a = THREE.MathUtils.degToRad(az);
-      shot.addScaledVector(new THREE.Vector3(Math.cos(a), 0, -Math.sin(a)), half * aspect * 0.3);
+      if (sheetBelow()) {
+        // keep the person above the sheet (the bottom 56% of a phone held upright), with as much room around them as
+        // on a wide screen
+        half *= 1.7;
+        const e = THREE.MathUtils.degToRad(el);
+        shot.addScaledVector(new THREE.Vector3(-Math.sin(e) * Math.sin(a), Math.cos(e), -Math.sin(e) * Math.cos(a)), -half * 0.56);
+      } else {
+        // keep the person left of the docked sheet, which takes half of a phone on its side
+        shot.addScaledVector(new THREE.Vector3(Math.cos(a), 0, -Math.sin(a)), half * aspect * (phone ? 0.5 : 0.3));
+      }
       return { az, el, target: shot, half, clip };
     },
     render: (el) => inspector.render(el, agentId),
@@ -619,6 +630,8 @@ async function main() {
   settings.on('seasons', syncSeason);
   settings.on('tags', () => tags.setMode(tagMode()));
   settings.on('pixel', resize);
+  document.body.classList.toggle('phone', phone);
+  if (phone && import.meta.env.VITE_DEMO_REPO) showDemoBar(import.meta.env.VITE_DEMO_REPO);
   document.body.classList.toggle('kiosk', settings.get('kiosk'));
   settings.on('kiosk', (on) => {
     document.body.classList.toggle('kiosk', on);
@@ -668,15 +681,18 @@ async function main() {
       fly.spot.tick?.(focusEl, dt);
     } else if (fly.spot && fly.k === 1) {
       const sp = fly.spot;
-      const az = Math.atan2(sp.normal.x, sp.normal.z);
-      const right = new THREE.Vector3(Math.cos(az), 0, -Math.sin(az)).multiplyScalar(sp.width / 2);
-      const up = new THREE.Vector3(0, sp.height / 2, 0);
-      const a = sp.center.clone().sub(right).add(up).project(camera);
-      const b = sp.center.clone().add(right).sub(up).project(camera);
-      const W = window.innerWidth, Hh = window.innerHeight;
-      const x0 = (Math.min(a.x, b.x) * 0.5 + 0.5) * W, x1 = (Math.max(a.x, b.x) * 0.5 + 0.5) * W;
-      const y0 = (-Math.max(a.y, b.y) * 0.5 + 0.5) * Hh, y1 = (-Math.min(a.y, b.y) * 0.5 + 0.5) * Hh;
-      Object.assign(focusEl.style, { left: `${x0}px`, top: `${y0}px`, width: `${x1 - x0}px`, height: `${y1 - y0}px` });
+      // a phone is too narrow to read a wall display: there its close-up takes the whole screen (style.css)
+      if (!phone) {
+        const az = Math.atan2(sp.normal.x, sp.normal.z);
+        const right = new THREE.Vector3(Math.cos(az), 0, -Math.sin(az)).multiplyScalar(sp.width / 2);
+        const up = new THREE.Vector3(0, sp.height / 2, 0);
+        const a = sp.center.clone().sub(right).add(up).project(camera);
+        const b = sp.center.clone().add(right).sub(up).project(camera);
+        const W = window.innerWidth, Hh = window.innerHeight;
+        const x0 = (Math.min(a.x, b.x) * 0.5 + 0.5) * W, x1 = (Math.max(a.x, b.x) * 0.5 + 0.5) * W;
+        const y0 = (-Math.max(a.y, b.y) * 0.5 + 0.5) * Hh, y1 = (-Math.min(a.y, b.y) * 0.5 + 0.5) * Hh;
+        Object.assign(focusEl.style, { left: `${x0}px`, top: `${y0}px`, width: `${x1 - x0}px`, height: `${y1 - y0}px` });
+      }
       if (!fly.shown) {
         fly.shown = true;
         focusEl.classList.remove('dock', 'agent-view');

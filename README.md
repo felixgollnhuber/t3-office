@@ -143,7 +143,7 @@ when it is used up, the lights go out.
 - **DJ booth** with generative lo-fi and YouTube DJ sets, plus lasers, haze and moving heads driven by a beat analysis.
 - **Real daylight, weather and seasons** for your location, with a night shift. Halloween and Christmas included.
 - **Second screen mode.** A director camera that cuts to whatever happens, and a kiosk mode without panels
-  (`?kiosk=1&director=1`).
+  (`?kiosk=1&director=1`). Phones start like this on their own; `?kiosk=0` brings the panels back.
 
   <img src="docs/media/kiosk.png" alt="Kiosk view at golden hour without panels: an agent waits at the boss's door with the dog, two agents high-five, the rest work at their desks" width="100%">
 
@@ -247,7 +247,8 @@ lights then just pulse at the listed tempo. Some videos cannot be embedded; the 
 | `px=2` | Size of an art pixel in CSS pixels |
 | `hours=12` | How far back threads are loaded |
 
-Parameters that are also settings win over the stored setting for that page view.
+Parameters that are also settings win over the stored setting for that page view. On a phone, `director`, `kiosk` and
+`tags` start as `1`, `1` and `quiet` until a parameter or the settings menu says otherwise.
 
 </details>
 
