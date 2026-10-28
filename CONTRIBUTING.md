@@ -1,5 +1,7 @@
 # Contributing to T3 Office
 
+> This guide was imported from upstream. For this collaborative extension, start with [AGENTS.md](AGENTS.md), the current [README](README.md) and [task records](docs/tasks.md). Local defaults, privacy boundaries, tests and leadership authorization in those files take precedence over upstream procedures below. No protected remote branch is configured here. Preserve the TypeScript style, generated art and bilingual UI conventions.
+
 Thanks for wanting to build on the office! New furniture, a better dog, a third language, a faster renderer, a fix
 for a typo: everything is welcome. This page gets you from zero to a pull request.
 

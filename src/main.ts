@@ -31,6 +31,7 @@ import { resolveSeason, type SeasonKind } from './seasons';
 import { Director, stage, type CameraRig, type XZ } from './director';
 import { clickables, hintOf, pickClickable, type Clickable } from './interact';
 import { showDemoBar } from './demobar';
+import { SharedSource } from './sharedsource';
 
 async function main() {
   const params = new URLSearchParams(location.search);
@@ -52,15 +53,20 @@ async function main() {
 
   const clock = new Clock(params);
   const want = params.get('source');
+  const shared = want === 'shared';
+  if (shared) document.body.classList.add('shared-office');
   let t3: T3Source | null = null;
-  if (want === 't3' || (want !== 'demo' && (await detectT3()))) {
+  if (!shared && (want === 't3' || (want !== 'demo' && (await detectT3())))) {
     try {
       t3 = await T3Source.connect({ hours: Number(params.get('hours') ?? 12) });
     } catch (e) {
       console.warn('T3 not readable, using demo data', e);
     }
   }
-  const source: AgentSource = t3 ?? new DemoSource(Number(params.get('sim') ?? 1), Number(params.get('agents') ?? 15));
+  const source: AgentSource = shared
+    ? await SharedSource.connect(params.get('floor') ?? '')
+    : t3 ?? new DemoSource(Number(params.get('sim') ?? 1), Number(params.get('agents') ?? 15));
+  if (shared) TEAMS.forEach((team) => { team.name = ''; });
   const syncTeams = () => {
     if (!t3) return;
     const named = new Map(t3.teams().map((t) => [t.index, t.short]));
@@ -70,7 +76,7 @@ async function main() {
   let teamSyncT = 0;
   const sfx = new Sfx();
   const weather = new Weather(settings.get('weather'), settings.get('lat'), settings.get('lon'));
-  const usage: UsageSource = t3 ? await T3Usage.connect() : new DemoUsage();
+  const usage: UsageSource = shared ? { groups: () => [], update: () => {} } : t3 ? await T3Usage.connect() : new DemoUsage();
 
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const pipe = new PixelPipeline(canvas, pixelFor(window.devicePixelRatio || 1), theme.post);
@@ -87,6 +93,7 @@ async function main() {
   const wall = new QuotaWall(office, usage, () => focusOn(spots[0]));
   if (t3) wall.live = 'live · T3';
   const board = new BoardSource(t3 ? 'live' : 'demo');
+  if (shared) board.data = { configured: false, fetchedAt: '', projects: [] };
   const pinView = new PinboardView(board);
   const paintBoard = () => {
     paintPinboard(office.pinboard.g, pinView.current);
@@ -121,7 +128,7 @@ async function main() {
       sfx.play('key');
     },
   });
-  const costs = new CostView(t3 ? 'live' : 'demo', (id, url, title) => {
+  const costs = shared ? null : new CostView(t3 ? 'live' : 'demo', (id, url, title) => {
     if (t3?.openThread(id)) hud!.toast(TXT.opening(title));
     else if (url) {
       window.open(url, '_blank', 'noopener');
@@ -131,7 +138,7 @@ async function main() {
   document.querySelector('#hud .receipt')!.addEventListener('click', () => {
     sfx.unlock();
     sfx.play('coin');
-    costs.open();
+    costs?.open();
   });
   const open = (id: string) => {
     if (id === 'boss') return hud!.toast(TXT.bossBusy);
@@ -311,6 +318,7 @@ async function main() {
     return { az, el: FLY_EL, target: sp.center, half };
   };
   const focusOn = (sp: Spot) => {
+    if (shared && (sp.id === 'quota' || sp.id === 'board')) return;
     if (fly.spot === sp && fly.dir >= 0) return;
     if (fly.spot && fly.spot !== sp) closeFocus(true);
     fly.spot = sp;
@@ -471,7 +479,7 @@ async function main() {
       }
     },
     half: () => ZOOM,
-    busy: () => !!fly.spot || !!drag || menu.isOpen || costs.isOpen,
+    busy: () => !!fly.spot || !!drag || menu.isOpen || !!costs?.isOpen,
   };
   const afoot = (id: string) => () => {
     const w = world.workers.get(id);
@@ -786,4 +794,10 @@ async function main() {
   loop();
 }
 
-main();
+main().catch((error) => {
+  console.error('Office could not start', error);
+  const message = document.createElement('p');
+  message.textContent = 'Office unavailable. Return to the building and try again.';
+  Object.assign(message.style, { position: 'fixed', top: '40%', width: '100%', textAlign: 'center', color: '#eee' });
+  document.body.replaceChildren(message);
+});

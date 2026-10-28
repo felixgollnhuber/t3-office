@@ -768,3 +768,12 @@ body.phone .focus-view:not(.dock) {
     top: 8px; bottom: 8px; right: max(8px, env(safe-area-inset-right)); width: calc(50% - 8px);
   }
 }
+/* Shared offices expose status only; the local cost/quota/project surfaces are not shared data. */
+.shared-office #hud .receipt,
+.shared-office #hud .pulse,
+.shared-office #hud .ticker,
+.shared-office .agent-view .stats,
+.shared-office .agent-view footer,
+.shared-office .quota-wall,
+.shared-office .quota-view,
+.shared-office .pin-view { display: none !important; }

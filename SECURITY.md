@@ -1,35 +1,24 @@
-# Security Policy
+# Security and privacy boundaries
 
-T3 Office runs a small web server on your machine that reads T3 Code's local data: thread titles, prompts, tool
-calls, file paths and costs. Keeping that data on your machine is the most important thing this project does.
+The building stores its own accounts, offices, sessions, invitations, grants, publisher credentials and latest status snapshots. It does not read T3 Code data by default. No commands or messages are sent to agents.
 
-## How T3 Office protects your data
+## Shared service
 
-- The server listens on `localhost` only. Vite's host check rejects requests for other host names, which protects
-  against DNS rebinding from websites you visit.
-- Everything is read-only. The SQLite database is opened read-only, nothing is written to T3 Code or the provider
-  folders, and no messages are sent.
-- There is no telemetry. The only outgoing requests are the ones listed in the README's
-  [privacy section](README.md#privacy).
+- Passwords use salted scrypt. Session, invitation and publisher tokens are stored hashed. Sessions last seven days, invitations 24 hours, publisher keys 30 days.
+- Cookies are HttpOnly and SameSite=Strict, with Secure on actual TLS connections. Cross-origin requests are rejected. Mutations require bounded JSON bodies. Authentication limits use socket addresses rather than untrusted forwarding headers.
+- Every office read checks ownership or an explicit grant. Unshared offices are undiscoverable. Presence-only visitors receive no agent activity or counts.
+- Published snapshots allow only opaque ID, provider and status. The bridge pseudonymizes raw thread IDs locally. The server generates generic names and excludes titles, prompts, paths, transcripts, costs and tool output.
+- Pause clears snapshots. Revoked grants deny subsequent reads; revoked keys deny subsequent publications, including requests whose bodies were already in flight. Existing viewer content clears on the next refresh. A recipient can retain information they already saw.
+- State lives in ignored `.local/`, with dev-server file access denied for that directory and SQLite files. Keep backups and publisher-key files private.
 
-Please do not expose the office to a network (for example with `--host 0.0.0.0` or a tunnel): anyone who can reach
-the port can read your threads.
+## Local companion
 
-## Supported versions
+`T3_LOCAL_DATA=1` explicitly enables the upstream read-only T3 API on a separate loopback instance. It reads sensitive local data. Do not tunnel, reverse-proxy or publicly host this companion. Its private routes reject non-loopback clients. The bridge accepts only loopback source origins, refuses redirects and requires HTTPS for remote destinations.
 
-Security fixes go into `main`. Please make sure you run the latest version before reporting.
+The normal building/shared-office UI never calls the private T3 APIs. Tests and screenshots use synthetic data. Developing the application does not authorize inspecting actual private databases or transcripts.
 
-## Reporting a vulnerability
+## Release limits
 
-Please **do not open a public issue** for security problems. Report them privately through
-[GitHub's private vulnerability reporting](https://github.com/felixgollnhuber/t3-office/security/advisories/new)
-(the "Report a vulnerability" button on the Security tab).
+This release is verified locally and is not publicly deployed. Public operation needs reviewed TLS/trusted-proxy configuration, account recovery, signup/abuse controls, backups and operational monitoring. The current service deliberately does not trust forwarding headers for origin/cookie decisions. Do not disable checks to make a proxy work.
 
-Helpful to include: what an attacker can do, the steps to reproduce, and the version or commit you tested. You will
-get an answer within a week. Once a fix is out, you are credited in the advisory unless you prefer otherwise.
-
-Things that are especially interesting:
-
-- ways for a website or another local user to read data from the office's API
-- anything that makes T3 Office write to T3 Code's data or run commands it should not
-- data leaving the machine without the user expecting it
+Report vulnerabilities privately to the maintainer of the repository where encountered. Do not post real conversations or credentials in public issues. This extension does not automatically contact upstream or send reports.
