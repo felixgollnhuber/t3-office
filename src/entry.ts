@@ -1,7 +1,7 @@
-/** Keep the building lightweight; load the 3D engine only when entering an office. */
+/** The original office is the home screen. Friends and customization are optional menu content. */
 const params = new URLSearchParams(location.search);
-if (params.has('source')) {
-  void import('./main');
-} else {
+if (params.get('view') === 'friends') {
   void import('./building');
+} else {
+  void import('./main');
 }

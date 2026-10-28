@@ -777,3 +777,13 @@ body.phone .focus-view:not(.dock) {
 .shared-office .quota-wall,
 .shared-office .quota-view,
 .shared-office .pin-view { display: none !important; }
+
+/* An optional drawer; the office and its original HUD remain the default experience. */
+.office-friends-dialog { width: min(740px, calc(100% - 24px)); height: min(820px, calc(100dvh - 32px)); padding: 0; border: 3px solid var(--edge); background: var(--paper); color: var(--ink); box-shadow: 7px 7px 0 var(--shadow); }
+.office-friends-dialog::backdrop { background: #0008; }
+.office-friends-dialog iframe { display: block; width: 100%; height: 100%; border: 0; }
+#hud .wx.friends { padding: 5px 8px; }
+.office-friends-launcher { display: none; position: fixed; z-index: 15; top: 12px; right: 12px; font: inherit; padding: 7px 10px; border: 2px solid var(--edge); color: var(--ink); background: var(--paper); box-shadow: 3px 3px var(--shadow); cursor: pointer; }
+body.kiosk .office-friends-launcher { display: block; }
+.shared-connection-cover { position: fixed; inset: 0; z-index: 1000; display: grid; place-content: center; gap: 18px; padding: 30px; text-align: center; background: var(--paper); color: var(--ink); }
+.shared-connection-cover a { color: inherit; }

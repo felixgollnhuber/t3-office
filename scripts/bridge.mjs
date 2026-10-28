@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Explicitly launched, publish-only bridge. Raw work stays local; only opaque IDs, providers and statuses leave. */
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
@@ -63,7 +63,9 @@ async function main(args) {
   const { server, source } = validateEndpoints(value('--server'), args.includes('--source') ? value('--source') : 'http://localhost:5174');
   const publisherToken = (await readFile(value('--token-file'), 'utf8')).trim();
   if (!/^[\w-]{43}$/.test(publisherToken)) throw new Error('The publisher key file is invalid.');
-  const salt = randomBytes(32);
+  // Keep aliases stable across bridge restarts without disclosing the original thread ID.
+  // Rotating the publisher key deliberately starts a new pseudonymous identity space.
+  const salt = createHmac('sha256', publisherToken).update('t3-office character identities v1').digest();
   let stopped = false;
   const stop = () => { stopped = true; };
   process.once('SIGINT', stop); process.once('SIGTERM', stop);

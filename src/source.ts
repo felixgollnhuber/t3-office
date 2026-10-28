@@ -16,6 +16,8 @@ export interface Thread {
   context: number;
   cost: number;
   settled: boolean;
+  /** Owner-chosen display label; never inferred from private prompts or file paths. */
+  workArea?: string;
   parentId?: string;
   /** thread that launched or steers this one (not a subagent relation) */
   managerId?: string;

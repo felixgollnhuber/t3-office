@@ -44,7 +44,8 @@
     "test": "node --experimental-strip-types --test server/building.test.ts scripts/bridge.test.mjs",
     "bridge": "node scripts/bridge.mjs",
     "serve": "vite preview",
-    "test:e2e": "node scripts/smoke.mjs"
+    "test:e2e": "node scripts/menu-races.mjs && node scripts/smoke.mjs",
+    "local": "node bin/local-office.mjs"
   },
   "dependencies": {
     "@fontsource-variable/bitcount-prop-single": "^5.3.0",

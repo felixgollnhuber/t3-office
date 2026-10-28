@@ -14,8 +14,11 @@ export interface Floor {
   online: boolean;
   updatedAt: number | null;
   agentCount: number;
+  areas: { area: WorkArea; count: number }[];
 }
-export interface SharedAgent { id: string; name: string; provider: Provider; status: Status }
+export const WORK_AREAS = ['general', 'frontend', 'backend', 'design', 'testing', 'research', 'operations'] as const;
+export type WorkArea = (typeof WORK_AREAS)[number];
+export interface SharedAgent { id: string; name: string; provider: Provider; status: Status; area: WorkArea }
 export interface OfficeSnapshot { office: Floor; agents: SharedAgent[] }
 export interface Grant { id: string; userName: string; userHandle: string; scope: 'presence' | 'activity' }
 export interface Invite { id: string; scope: 'presence' | 'activity'; expiresAt: number }
@@ -33,7 +36,9 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
     headers: method === 'GET' ? {} : { 'Content-Type': 'application/json' },
     body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
   });
-  const json = await res.json().catch(() => ({ error: 'The building service is unavailable.' }));
+  // Preserve abort/parse failures. Treating an interrupted 200 response as success
+  // made shared views mistake a temporary connection failure for a missing office.
+  const json = await res.json();
   if (!res.ok) throw new ApiError(json.error ?? 'Request failed.', res.status);
   return json as T;
 }

@@ -15,10 +15,11 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 const token = () => randomBytes(32).toString('base64url');
 const providers = new Set(['claude', 'codex', 'cursor', 'gemini']);
 const statuses = new Set(['running', 'waiting', 'idle', 'failed', 'completed']);
+const areas = new Set(['general', 'frontend', 'backend', 'design', 'testing', 'research', 'operations']);
 type Next = () => void;
 type Row = Record<string, string | number | null>;
 type User = { id: string; handle: string; name: string };
-type Agent = { id: string; name: string; provider: string; status: string };
+type Agent = { id: string; name: string; provider: string; status: string; area?: string };
 class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) { super(message); this.status = status; }
@@ -65,6 +66,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
     CREATE TABLE IF NOT EXISTS invites(id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, office TEXT NOT NULL REFERENCES offices(id), scope TEXT NOT NULL, expires INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS grants(id TEXT PRIMARY KEY, office TEXT NOT NULL REFERENCES offices(id), user TEXT NOT NULL REFERENCES users(id), scope TEXT NOT NULL, UNIQUE(office,user));
     CREATE TABLE IF NOT EXISTS publisher_tokens(id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, user TEXT NOT NULL REFERENCES users(id), expires INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS characters(office TEXT NOT NULL REFERENCES offices(id), agent TEXT NOT NULL, name TEXT NOT NULL, area TEXT NOT NULL, PRIMARY KEY(office,agent));
     CREATE INDEX IF NOT EXISTS grants_user ON grants(user);
     CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires);
     CREATE INDEX IF NOT EXISTS invites_office ON invites(office);
@@ -73,6 +75,13 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
   const all = (sql: string, ...values: (string | number)[]) => db.prepare(sql).all(...values) as Row[];
   const run = (sql: string, ...values: (string | number)[]) => db.prepare(sql).run(...values);
   const ownOffice = (user: User) => one('SELECT * FROM offices WHERE owner=?', user.id)!;
+  const characters = (office: Row) => {
+    const profiles = new Map(all('SELECT agent,name,area FROM characters WHERE office=?', String(office.id)).map((p) => [p.agent, p]));
+    return (JSON.parse(String(office.agents)) as Agent[]).map((a) => {
+      const profile = profiles.get(a.id);
+      return { ...a, name: profile ? String(profile.name) : a.name, area: profile ? String(profile.area) : 'general' };
+    });
+  };
   const session = (user: User) => {
     const office = ownOffice(user);
     return { user, office: { id: office.id, name: office.name, paused: !!office.paused } };
@@ -103,12 +112,16 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
   const floor = (office: Row, user: User, level: string) => {
     const isOwner = office.owner === user.id;
     const online = !office.paused && typeof office.updated === 'number' && now() - office.updated < STALE;
-    const agents = JSON.parse(String(office.agents)) as Agent[];
+    const agents = characters(office);
+    const visibleActivity = online && (isOwner || level === 'activity');
+    const counts = new Map<string, number>();
+    if (visibleActivity) for (const a of agents) counts.set(a.area, (counts.get(a.area) ?? 0) + 1);
     return {
       id: office.id, name: office.name,
       ownerName: one('SELECT name FROM users WHERE id=?', String(office.owner))!.name,
       isOwner, scope: isOwner ? 'owner' : level, online,
       updatedAt: office.updated, agentCount: isOwner || (level === 'activity' && online) ? agents.length : 0,
+      areas: [...counts].map(([area, count]) => ({ area, count })),
     };
   };
   const rates = new Map<string, { until: number; count: number }>();
@@ -230,6 +243,22 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
         run('UPDATE offices SET agents=?,updated=? WHERE owner=?', JSON.stringify(agents), now(), user.id);
         return reply(200, { ok: true, agentCount: agents.length });
       }
+      if (match('/characters', ['GET'])) return reply(200, { characters: characters(office) });
+      const characterMatch = route.match(/^\/characters\/([a-zA-Z0-9_-]+)$/);
+      if (characterMatch) {
+        if (method !== 'POST') fail(405, 'Method not allowed.');
+        const input = await authorizedBody();
+        const current = ownOffice(user);
+        const id = characterMatch[1];
+        const exists = characters(current).some((a) => a.id === id) || one('SELECT agent FROM characters WHERE office=? AND agent=?', String(current.id), id);
+        if (!exists) fail(404, 'Character not found in your office.');
+        const name = text(input.name, 'character name', 32);
+        if (/[\u0000-\u001f\u007f]/.test(name)) fail(400, 'Use a visible character name.');
+        if (typeof input.area !== 'string' || !areas.has(input.area)) fail(400, 'Choose a valid work area.');
+        if (!one('SELECT agent FROM characters WHERE office=? AND agent=?', String(current.id), id) && Number(one('SELECT COUNT(*) AS count FROM characters WHERE office=?', String(current.id))!.count) >= 256) fail(409, 'This office has reached its character profile limit.');
+        run('INSERT INTO characters VALUES(?,?,?,?) ON CONFLICT(office,agent) DO UPDATE SET name=excluded.name,area=excluded.area', String(current.id), id, name, input.area);
+        return reply(200, { ok: true });
+      }
       const officeMatch = route.match(/^\/offices\/([\w-]+)$/);
       if (officeMatch) {
         if (method !== 'GET') fail(405, 'Method not allowed.');
@@ -239,7 +268,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
         if (!level) fail(404, 'Office not found.');
         const summary = floor(selected, user, String(level));
         const visible = level === 'owner' || (level === 'activity' && summary.online);
-        return reply(200, { office: summary, agents: visible ? JSON.parse(String(selected.agents)) : [] });
+        return reply(200, { office: summary, agents: visible ? characters(selected) : [] });
       }
       if (match('/invites', ['GET', 'POST'])) {
         if (method === 'GET') return reply(200, { invites: all('SELECT id,scope,expires AS expiresAt FROM invites WHERE office=? AND expires>? ORDER BY expires DESC', String(office.id), now()) });

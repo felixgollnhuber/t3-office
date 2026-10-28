@@ -32,6 +32,7 @@ import { Director, stage, type CameraRig, type XZ } from './director';
 import { clickables, hintOf, pickClickable, type Clickable } from './interact';
 import { showDemoBar } from './demobar';
 import { SharedSource } from './sharedsource';
+import { installOfficeMenu } from './officemenu';
 
 async function main() {
   const params = new URLSearchParams(location.search);
@@ -68,6 +69,10 @@ async function main() {
     : t3 ?? new DemoSource(Number(params.get('sim') ?? 1), Number(params.get('agents') ?? 15));
   if (shared) TEAMS.forEach((team) => { team.name = ''; });
   const syncTeams = () => {
+    if (source instanceof SharedSource) {
+      TEAMS.forEach((team, i) => { team.name = source.teams()[i] ?? ''; });
+      return;
+    }
     if (!t3) return;
     const named = new Map(t3.teams().map((t) => [t.index, t.short]));
     TEAMS.forEach((team, i) => (team.name = named.get(i) ?? ''));
@@ -90,6 +95,7 @@ async function main() {
   const player = new Player(sfx, () => hud!.ytHost());
   const world = new World(office, theme, source, cycle, sfx, player, weather);
   hud = new Hud(theme, sfx, clock, source, player, weather, () => menu.open());
+  installOfficeMenu(source, shared);
   const wall = new QuotaWall(office, usage, () => focusOn(spots[0]));
   if (t3) wall.live = 'live · T3';
   const board = new BoardSource(t3 ? 'live' : 'demo');
@@ -799,5 +805,7 @@ main().catch((error) => {
   const message = document.createElement('p');
   message.textContent = 'Office unavailable. Return to the building and try again.';
   Object.assign(message.style, { position: 'fixed', top: '40%', width: '100%', textAlign: 'center', color: '#eee' });
+  const home = document.createElement('a'); home.href = '/'; home.textContent = 'Return to your office';
+  message.append(document.createElement('br'), home);
   document.body.replaceChildren(message);
 });

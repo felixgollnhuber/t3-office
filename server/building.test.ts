@@ -108,7 +108,7 @@ test('published snapshots whitelist data, enforce scope, and vanish on pause or 
     const privateAgent = { ...synthetic[0], name: 'secret-name', title: 'secret-title', transcript: 'secret-prompt', file: '/secret/path' };
     assert.equal((await f.request('/publish', 'POST', { agents: [privateAgent], officeId: b.office.id }, a.client)).status, 200);
     const own = (await f.request(`/offices/${a.office.id}`, 'GET', undefined, a.client)).data;
-    assert.deepEqual(own.agents, [{ ...synthetic[0], name: 'Agent 1' }]);
+    assert.deepEqual(own.agents, [{ ...synthetic[0], name: 'Agent 1', area: 'general' }]);
     assert(!JSON.stringify(own).includes('secret'));
     const presence = (await f.request(`/offices/${a.office.id}`, 'GET', undefined, b.client)).data;
     assert.deepEqual(presence.agents, []); assert.equal(presence.office.agentCount, 0); assert.equal(presence.office.online, true);
@@ -201,6 +201,39 @@ test('auth abuse is rate limited without trusting spoofed forwarding headers', a
     assert.equal((await f.request('/register', 'POST', {})).status, 429);
     f.advance(15 * 60_000 + 1);
     assert.equal((await f.request('/register', 'POST', {})).status, 400);
+  } finally { await f.close(); }
+});
+
+test('character names and work areas are owner-controlled, durable and limited to activity access', async () => {
+  const f = await fixture();
+  try {
+    const a = await f.register('alice'); const b = await f.register('bobby');
+    await f.request('/publish', 'POST', { agents: [{ ...synthetic[0], name: 'Injected', area: 'backend' }] }, a.client);
+    assert.equal((await f.request('/characters', 'GET', undefined, a.client)).data.characters[0].area, 'general');
+    assert.equal((await f.request('/characters/opaque-agent', 'POST', { name: 'Cody', area: 'frontend' }, b.client)).status, 404);
+    assert.equal((await f.request('/characters/opaque-agent', 'POST', { name: 'Cody', area: 'frontend' }, a.client)).status, 200);
+    assert.equal((await f.request('/characters/opaque-agent', 'POST', { name: 'x'.repeat(33), area: 'frontend' }, a.client)).status, 400);
+    assert.equal((await f.request('/characters/opaque-agent', 'POST', { name: 'Cody', area: 'private/project/path' }, a.client)).status, 400);
+    const key = (await f.request('/publisher-tokens', 'POST', {}, a.client)).data;
+    assert.equal((await f.request('/characters/opaque-agent', 'POST', { name: 'Changed', area: 'backend' }, {}, { authorization: `Bearer ${key.token}` })).status, 401);
+    await f.restart();
+    await f.request('/publish', 'POST', { agents: synthetic }, a.client);
+    const own = (await f.request(`/offices/${a.office.id}`, 'GET', undefined, a.client)).data;
+    assert.equal(own.agents[0].name, 'Cody'); assert.equal(own.agents[0].area, 'frontend');
+    assert.deepEqual(own.office.areas, [{ area: 'frontend', count: 1 }]);
+    const invite = (await f.request('/invites', 'POST', { scope: 'presence' }, a.client)).data;
+    await f.request('/accept', 'POST', { token: invite.token }, b.client);
+    const presence = (await f.request(`/offices/${a.office.id}`, 'GET', undefined, b.client)).data;
+    assert.deepEqual(presence.office.areas, []); assert.deepEqual(presence.agents, []);
+    const activity = (await f.request('/invites', 'POST', { scope: 'activity' }, a.client)).data;
+    await f.request('/accept', 'POST', { token: activity.token }, b.client);
+    assert.equal((await f.request(`/offices/${a.office.id}`, 'GET', undefined, b.client)).data.agents[0].name, 'Cody');
+    f.advance(46_000);
+    assert.deepEqual((await f.request(`/offices/${a.office.id}`, 'GET', undefined, b.client)).data.office.areas, []);
+    await f.request('/office', 'POST', { paused: true }, a.client);
+    await f.request('/office', 'POST', { paused: false }, a.client);
+    await f.request('/publish', 'POST', { agents: synthetic }, a.client);
+    assert.equal((await f.request('/characters', 'GET', undefined, a.client)).data.characters[0].name, 'Cody');
   } finally { await f.close(); }
 });
 

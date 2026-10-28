@@ -7,6 +7,7 @@ import type { World, Worker } from './workers';
 import { date, num, usd } from './i18n';
 import { S } from './i18n/agent';
 import './thread.css';
+import { B } from './i18n/building';
 
 /** 3x5 pixel glyphs, rows top to bottom, 3 bits each */
 const GLYPHS: Record<string, number[]> = {
@@ -246,7 +247,7 @@ export class AgentInspector {
     this.part(
       el,
       'body',
-      `<section><h5>${S.task}</h5><p class="task">${esc(t.title)}</p>${team ? `<p class="team" style="--team:${team.color}">${esc(live.project ?? team.name)}</p>` : ''}</section>
+      `<section><h5>${S.task}</h5><p class="task">${esc(t.title)}</p>${team ? `<p class="team" style="--team:${team.color}">${esc(live.project ?? team.name)}</p>` : ''}${t.workArea ? `<p class="team">${B.workArea}: ${esc(t.workArea)}</p>` : ''}</section>
       <section><h5>${S.rightNow}</h5><p>${esc(live.activity || (w ? this.activity(w) : ''))}</p>${live.message ? `<p class="bubble-q">${S.quote(esc(live.message))}</p>` : w?.bubble && w.bubble.until > this.world.time ? `<p class="bubble-q">${S.quote(esc(w.bubble.text))}</p>` : ''}</section>
       <div class="stats">
         <div><b>${t.toolCalls}</b><small>${S.toolCalls}</small></div>

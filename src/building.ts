@@ -1,274 +1,157 @@
-/** Invitation-based building shell. One iframe owns one office renderer; no hidden floors keep running. */
+/** Optional friends menu embedded in the original office. Own-office use never requires a building account. */
 import '@fontsource/pixelify-sans/700.css';
+import '@fontsource-variable/bitcount-prop-single';
 import './building.css';
-import { api, ApiError, type Session, type Floor, type Grant, type Invite } from './building-api';
+import { api, ApiError, WORK_AREAS, type SharedAgent, type Session, type Floor, type Grant, type Invite } from './building-api';
 import { B } from './i18n/building';
-import { lang, setLang } from './i18n';
+import { THEMES } from './themes';
 
+const theme = THEMES.find((t) => t.id === new URLSearchParams(location.search).get('theme')) ?? THEMES[0];
+for (const [key, value] of Object.entries({ paper: theme.hud.paper, ink: theme.hud.ink, muted: theme.hud.muted, accent: theme.hud.accent, edge: theme.hud.edge, shadow: theme.hud.shadow })) document.documentElement.style.setProperty(`--${key}`, value);
 const esc = (s: string | number) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-const root = document.createElement('div');
-root.id = 'building';
-document.body.replaceChildren(root);
+const root = document.createElement('main'); root.id = 'friends-menu'; document.body.replaceChildren(root);
+const embedded = parent !== window;
+const send = (data: unknown) => { if (embedded) parent.postMessage(data, location.origin); };
 let session: Session | null = null;
-let floors: Floor[] = [];
-let selected = '';
-let rendered = '';
-let demoTimer: ReturnType<typeof setInterval> | undefined;
-let demoTick = 0;
-let generation = 0;
-let refreshingGeneration = -1;
+let local = false;
+let sharing = false;
+let pendingShare = false;
+let localCharacters: SharedAgent[] = [];
 let authMode: 'register' | 'login' = 'register';
+let tab: 'friends' | 'characters' | 'sharing' = 'friends';
+let generation = 0;
 let invitation = sessionStorage.getItem('building.invitation') ?? '';
-const hash = new URLSearchParams(location.hash.slice(1));
-if (hash.has('invite')) {
-  invitation = hash.get('invite') ?? '';
-  sessionStorage.setItem('building.invitation', invitation);
-  history.replaceState(null, '', location.pathname + location.search);
+const token = new URLSearchParams(location.hash.slice(1)).get('invite');
+if (token) { invitation = token; sessionStorage.setItem('building.invitation', token); history.replaceState(null, '', location.pathname + location.search); }
+let refreshing = false;
+let logoutPending = false;
+
+function notice(text: string, error = false) {
+  const target = root.querySelector<HTMLElement>('#notice');
+  if (target) { target.textContent = text; target.hidden = !text; target.classList.toggle('error', error); }
 }
-
-const logo = `<span class="building-logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>`;
-const language = `<label class="language">${B.language}<select id="language"><option value="en" ${lang === 'en' ? 'selected' : ''}>English</option><option value="de" ${lang === 'de' ? 'selected' : ''}>Deutsch</option></select></label>`;
-const illustration = () => `<div class="tower" aria-hidden="true"><div class="tower-roof"></div>${[3, 2, 1].map((n) => `<div class="tower-floor"><span class="floor-digit">0${n}</span><div class="tiny-office"><i class="plant"></i><i class="desk"></i><i class="person"></i><i class="desk second"></i><i class="person second"></i><i class="window"></i></div></div>`).join('')}<div class="tower-lobby"><span>t3 office</span><i></i></div><div class="tower-base"></div></div>`;
-
-function message(text: string, error = false) {
-  document.querySelectorAll<HTMLElement>('#notice, dialog[open] .dialog-notice').forEach((target) => {
-    target.textContent = text;
-    target.classList.toggle('error', error);
-    target.hidden = !text;
-  });
-}
-
 async function run(task: () => Promise<void>) {
-  try { await task(); }
-  catch (error) {
-    message(error instanceof Error ? error.message : B.genericError, true);
-    if (error instanceof ApiError && error.status === 401 && session) { generation++; clearDemo(); session = null; renderAuth(); message(error.message, true); }
+  try { await task(); } catch (error) { notice(error instanceof Error ? error.message : B.genericError, true); }
+}
+function render() {
+  root.innerHTML = `<header><h1>${B.friendsMenu}</h1><button data-action="close" aria-label="${B.close}">×</button></header><nav class="menu-tabs" aria-label="${B.friendsMenu}">${(['friends', 'characters', 'sharing'] as const).map((t) => `<button data-tab="${t}" aria-pressed="${tab === t}">${t === 'friends' ? B.friends : t === 'characters' ? B.characters : B.sharing}</button>`).join('')}</nav><p id="notice" role="status" aria-live="polite" hidden></p><section id="panel"></section>`;
+  const panel = root.querySelector('#panel')!;
+  if (tab === 'characters') {
+    panel.innerHTML = `<p class="hint">${B.characterHint}</p><div id="character-list"></div>`;
+    if (local) { if (!embedded) renderCharacters(localCharacters); }
+    else if (session) {
+      const epoch = generation;
+      void run(async () => { const result = await api<{ characters: SharedAgent[] }>('/characters'); if (epoch === generation && session) renderCharacters(result.characters); });
+    }
+    else panel.innerHTML += `<p>${B.noCharacters}</p>`;
+    send({ type: 'office-characters-request' });
+    return;
   }
-}
-
-function renderAuth() {
-  rendered = '';
-  root.innerHTML = `<header class="public-header"><a href="/" class="brand">${logo}<span>T3 Office <small>${B.building}</small></span></a>${language}</header>
-    <main class="welcome"><section class="welcome-copy"><p class="eyebrow">${B.eyebrow}</p><h1>${esc(B.tagline).replace('\n', '<br>')}</h1><p class="intro">${B.intro}</p><p class="privacy-note"><span aria-hidden="true">◇</span> ${B.consent}</p>${illustration()}</section>
-    <section class="auth-card"><span class="small-label">T3 OFFICE / ${B.building.toUpperCase()}</span><h2>${authMode === 'register' ? B.register : B.login}</h2><p class="muted">${B.accountHint}</p>
-    <p id="notice" role="status" aria-live="polite" ${invitation ? '' : 'hidden'}>${invitation ? B.acceptPending : ''}</p>
-    <form id="auth-form">${authMode === 'register' ? `<label>${B.name}<input name="name" required maxlength="60" autocomplete="name"></label>` : ''}
-    <label>${B.handle}<input name="handle" required minlength="3" maxlength="32" pattern="[a-zA-Z0-9_-]+" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
-    <label>${B.password}<input name="password" type="password" required minlength="12" maxlength="256" autocomplete="${authMode === 'register' ? 'new-password' : 'current-password'}" aria-describedby="password-hint"></label><small id="password-hint">${B.passwordHint}</small>
-    <button class="primary" type="submit">${authMode === 'register' ? B.register : B.login} <span aria-hidden="true">↗</span></button></form>
-    <button class="text-button" data-action="auth-mode">${authMode === 'register' ? B.loginInstead : B.registerInstead}</button><a class="demo-link" href="?source=demo&weather=clear">${B.demo} ↗</a></section></main>`;
-}
-
-function renderShell() {
-  root.innerHTML = `<div class="building-layout"><aside class="directory"><a class="brand" href="/">${logo}<span>T3 Office <small>${B.building}</small></span></a><div class="directory-heading"><span class="small-label">${B.lobby}</span><span aria-hidden="true">↕</span></div>
-    <nav id="floor-list" aria-label="${B.lobby}"></nav><div class="directory-bottom"><button data-action="accept-open">+ ${B.accept}</button><div class="profile"><span class="avatar">${esc(session!.user.name.slice(0, 2).toUpperCase())}</span><span>${esc(session!.user.name)}<small>@${esc(session!.user.handle)}</small></span><button data-action="logout" aria-label="${B.signOut}" title="${B.signOut}">↗</button></div></div></aside>
-    <main class="workspace"><header class="office-header"><div><span class="small-label" id="floor-kicker"></span><h1 id="office-title"></h1></div><div class="header-actions"><button data-action="manage" class="owner-control">${B.settings}</button><button class="primary owner-control" data-action="invite">+ ${B.invite}</button></div></header>
-    <p id="notice" role="status" aria-live="polite" hidden></p><div class="office-toolbar"><span id="office-state"></span><span id="sharing-scope"></span></div>
-    <section id="office-room" class="office-room" aria-label="${B.overview}"></section>
-    <footer class="office-footer"><span>◇ ${B.safe}</span><span class="connection-dot">${B.connection}</span></footer></main></div>
-    <dialog id="manage-dialog" aria-labelledby="manage-title"><div class="dialog-header"><h2 id="manage-title">${B.settings}</h2><button data-action="close-dialog" aria-label="${B.close}">×</button></div><div class="dialog-body"><p class="dialog-notice" role="status" aria-live="polite" hidden></p>
-    <form id="name-form"><label>${B.officeName}<input name="name" maxlength="80" required value="${esc(session!.office.name)}"></label><button type="submit">${B.save}</button></form>
-    <section class="control-section"><div class="control-heading"><h3>${B.activity}</h3><button data-action="pause">${session!.office.paused ? B.resume : B.pause}</button></div><p class="muted">${B.safe}</p><div class="button-row"><button data-action="demo">${demoTimer ? B.stopDemo : B.startDemo}</button></div></section>
-    <section class="control-section" id="invite-section"><h3>${B.invite}</h3><p class="muted">${B.inviteHint}</p><form id="invite-form"><label>${B.shareLevel}<select name="scope"><option value="presence">${B.presence}</option><option value="activity">${B.activity}</option></select></label><button class="primary" type="submit">${B.createInvite}</button></form><div id="invite-result"></div></section>
-    <section class="control-section"><h3>${B.guests}</h3><div id="grant-list"></div><h3>${B.pendingInvites}</h3><div id="invite-list"></div></section>
-    <section class="control-section" id="publisher-section"><h3>${B.publisher}</h3><p class="muted">${B.publisherHint}</p><button data-action="create-key">${B.createKey}</button><div id="key-result"></div><h3>${B.keys}</h3><div id="key-list"></div></section></div></dialog>
-    <dialog id="accept-dialog" aria-labelledby="accept-title"><div class="dialog-header"><h2 id="accept-title">${B.accept}</h2><button data-action="close-dialog" aria-label="${B.close}">×</button></div><div class="dialog-body"><p class="dialog-notice" role="status" aria-live="polite" hidden></p><p class="muted">${B.acceptHint}</p><form id="accept-form"><label>${B.token}<input name="token" required value="${esc(invitation)}" autocomplete="off"></label><button class="primary" type="submit">${B.accept}</button></form></div></dialog>`;
-}
-
-function renderFloors() {
-  const nav = document.querySelector('#floor-list')!;
-  nav.innerHTML = `<p class="group-label">${B.own}</p>${floors.filter((f) => f.isOwner).map(floorButton).join('')}<p class="group-label">${B.shared}</p>${floors.filter((f) => !f.isOwner).map(floorButton).join('') || `<p class="empty-directory">${B.emptyDirectory}</p>`}`;
-}
-
-function floorButton(f: Floor) {
-  return `<button class="floor-button ${f.id === selected ? 'selected' : ''}" data-floor="${esc(f.id)}" aria-current="${f.id === selected ? 'page' : 'false'}"><span class="floor-icon" aria-hidden="true">▦</span><span><b>${esc(f.name)}</b><small>${esc(f.ownerName)} · ${f.online ? B.online : B.offline}</small></span><span class="status-dot ${f.online ? 'on' : ''}" aria-hidden="true"></span></button>`;
-}
-
-function renderOffice() {
-  const floor = floors.find((f) => f.id === selected);
-  const room = document.querySelector<HTMLElement>('#office-room')!;
-  if (!floor) { room.replaceChildren(); rendered = ''; return; }
-  document.querySelector('#office-title')!.textContent = floor.name;
-  document.querySelector('#floor-kicker')!.textContent = floor.isOwner ? B.owner.toUpperCase() : `${B.visitor.toUpperCase()} / ${floor.ownerName}`;
-  document.querySelectorAll<HTMLElement>('.owner-control').forEach((el) => { el.hidden = !floor.isOwner; });
-  document.querySelector('#office-state')!.textContent = floor.isOwner && session!.office.paused ? B.paused : `${floor.online ? B.online : B.offline}${floor.agentCount ? ` · ${floor.agentCount} ${B.agents}` : ''}${demoTimer && floor.isOwner ? ` · ${B.simulation}` : ''}`;
-  document.querySelector('#sharing-scope')!.textContent = floor.scope === 'presence' ? B.presence : floor.isOwner ? B.private : B.activity;
-  const key = `${floor.id}:${floor.online}:${floor.scope}:${floor.isOwner && session!.office.paused}`;
-  if (key === rendered) return;
-  rendered = key;
-  const hasActivity = floor.online && floor.scope !== 'presence' && !(floor.isOwner && session!.office.paused);
-  if (hasActivity) {
-    room.innerHTML = `<iframe title="${esc(floor.name)}" src="?source=shared&floor=${encodeURIComponent(floor.id)}&weather=clear&theme=campus&season=off&kiosk=1&zoom=14" referrerpolicy="no-referrer"></iframe><span class="room-hint">${B.roomHint}</span>`;
+  if (!session) {
+    panel.innerHTML = `<h2>${B.yourOfficeFirst}</h2><p class="hint">${B.optionalAccount}</p>${invitation ? `<p>${B.acceptPending}</p>` : ''}<form id="auth-form">${authMode === 'register' ? `<label>${B.name}<input name="name" required maxlength="60" autocomplete="name"></label>` : ''}<label>${B.handle}<input name="handle" required minlength="3" maxlength="32" pattern="[a-zA-Z0-9_-]+" autocomplete="username" autocapitalize="none"></label><label>${B.password}<input name="password" type="password" required minlength="12" maxlength="256" autocomplete="${authMode === 'register' ? 'new-password' : 'current-password'}"></label><small>${B.passwordHint}</small><button type="submit">${authMode === 'register' ? B.register : B.login}</button></form><button data-action="auth-mode">${authMode === 'register' ? B.loginInstead : B.registerInstead}</button>`;
+    return;
+  }
+  const account = `<p class="account">${esc(session.user.name)} · @${esc(session.user.handle)} <button data-action="logout">${B.signOut}</button></p>`;
+  if (tab === 'friends') {
+    panel.innerHTML = `${account}<div class="section-title"><h2>${B.building}</h2><button data-action="own">${B.own}</button></div><p class="hint">${B.buildingHint}</p><div id="floor-list"></div><section><h2>${B.invite}</h2><p class="hint">${B.inviteHint}</p><form id="invite-form"><label>${B.shareLevel}<select name="scope"><option value="presence">${B.presence}</option><option value="activity">${B.activity}</option></select></label><button type="submit">${B.createInvite}</button></form><div id="invite-result"></div></section><section><h2>${B.accept}</h2><form id="accept-form"><label>${B.token}<input name="token" required value="${esc(invitation)}" autocomplete="off"></label><button type="submit">${B.accept}</button></form></section><section><h2>${B.guests}</h2><div id="grant-list"></div><h2>${B.pendingInvites}</h2><div id="invite-list"></div></section>`;
+    void refreshFriends();
   } else {
-    const paused = floor.isOwner && session!.office.paused;
-    room.innerHTML = `<div class="empty-office">${illustration()}<div><span class="small-label">${B.floorLabel} / ${esc(floor.ownerName)}</span><h2>${paused ? B.paused : floor.isOwner ? B.emptyTitle : floor.scope === 'presence' ? B.presenceTitle : B.offlineTitle}</h2><p>${paused ? B.pausedBody : floor.isOwner ? B.emptyBody : floor.scope === 'presence' ? B.presenceBody : B.offlineBody}</p>${floor.isOwner ? `<div class="button-row"><button class="primary" data-action="${paused ? 'pause' : 'demo'}">${paused ? B.resume : B.startDemo}</button><button data-action="publisher">${B.publisher}</button></div>` : ''}</div></div>`;
+    panel.innerHTML = `${account}<h2>${B.sharing}</h2><p class="hint">${B.safe}</p><p id="sharing-state"></p>${local ? `<button data-action="share">${sharing ? B.stopSharing : B.shareOffice}</button><p class="hint">${B.shareOfficeHint}</p>` : ''}<form id="name-form"><label>${B.officeName}<input name="name" maxlength="80" required value="${esc(session.office.name)}"></label><button type="submit">${B.save}</button></form><section><h2>${B.publisher}</h2><p class="hint">${B.publisherHint}</p><button data-action="create-key">${B.createKey}</button><div id="key-result"></div><div id="key-list"></div></section>`;
+    renderSharingState();
+    void run(async () => renderKeys());
   }
 }
-
-async function refresh() {
-  if (!session || refreshingGeneration === generation) return;
+function renderCharacters(agents: SharedAgent[]) {
+  if (tab !== 'characters') return;
+  root.querySelector('#character-list')!.innerHTML = agents.map((a) => `<form class="character-form" data-character="${esc(a.id)}"><span class="character-avatar" aria-hidden="true">${esc(a.name.slice(0, 2).toUpperCase())}</span><div><small>${esc(a.provider)}</small><label>${B.characterName}<input name="name" required maxlength="32" value="${esc(a.name)}"></label><label>${B.workArea}<select name="area">${WORK_AREAS.map((area) => `<option value="${area}" ${a.area === area ? 'selected' : ''}>${B.areaLabels[area]}</option>`).join('')}</select></label></div><button type="submit">${B.saveCharacter}</button></form>`).join('') || `<p>${B.noCharacters}</p>`;
+}
+function renderSharingState() {
+  const state = root.querySelector('#sharing-state'); if (state) state.textContent = sharing ? B.online : B.notSharing;
+  const button = root.querySelector('[data-action="share"]'); if (button) button.textContent = sharing ? B.stopSharing : B.shareOffice;
+  if (button instanceof HTMLButtonElement) button.disabled = pendingShare;
+}
+async function refreshFriends() {
+  if (!session || tab !== 'friends' || refreshing) return;
+  refreshing = true;
   const epoch = generation;
-  const userId = session.user.id;
-  refreshingGeneration = epoch;
   try {
-    const [nextSession, data] = await Promise.all([api<Session>('/session'), api<{ floors: Floor[] }>('/floors')]);
-    if (epoch !== generation || !session || session.user.id !== userId) return;
-    session = nextSession;
-    floors = data.floors;
-    if (!floors.some((f) => f.id === selected)) selected = session.office.id;
-    renderFloors(); renderOffice();
+    const [data, grants, invites] = await Promise.all([api<{ floors: Floor[] }>('/floors'), api<{ grants: Grant[] }>('/grants'), api<{ invites: Invite[] }>('/invites')]);
+    if (epoch !== generation || !session || tab !== 'friends') return;
+    root.querySelector('#floor-list')!.innerHTML = [...data.floors].reverse().map((f) => `<button class="floor" data-floor="${esc(f.id)}" data-own="${f.isOwner}"><span><b>${esc(f.name)}</b><small>${esc(f.ownerName)} · ${f.online ? B.online : B.offline}</small><small>${f.scope === 'presence' ? B.presence : f.areas.map((a) => `${B.areaLabels[a.area]} (${a.count})`).join(' · ')}</small></span><span class="floor-windows" aria-hidden="true">${Array.from({ length: 3 }, () => `<i class="${f.online ? 'lit' : ''}"></i>`).join('')}</span><span>${f.isOwner ? B.own : B.enter} ↗</span></button>`).join('');
+    root.querySelector('#grant-list')!.innerHTML = grants.grants.map((g) => `<div class="access-row"><span>${esc(g.userName)} · ${g.scope === 'activity' ? B.activity : B.presence}</span><button data-delete="grants" data-id="${esc(g.id)}">${B.revoke}</button></div>`).join('') || `<p class="hint">${B.noGuests}</p>`;
+    root.querySelector('#invite-list')!.innerHTML = invites.invites.map((i) => `<div class="access-row"><span>${i.scope === 'activity' ? B.activity : B.presence}<small>${B.expires} ${esc(new Date(i.expiresAt).toLocaleString())}</small></span><button data-delete="invites" data-id="${esc(i.id)}">${B.revoke}</button></div>`).join('') || `<p class="hint">${B.noInvites}</p>`;
   } catch (error) {
-    if (epoch !== generation || !session || session.user.id !== userId) return;
-    rendered = '';
-    document.querySelector('#office-room')?.replaceChildren();
-    if (error instanceof ApiError && error.status === 401) { generation++; clearDemo(); session = null; renderAuth(); }
-    message(B.connectionLost, true);
-  } finally { if (refreshingGeneration === epoch) refreshingGeneration = -1; }
+    if (epoch !== generation) return;
+    if (error instanceof ApiError && error.status === 401) { session = null; generation++; render(); }
+    notice(error instanceof Error ? error.message : B.genericError, true);
+  } finally { refreshing = false; }
 }
-
-async function controls() {
-  const [grants, invites, keys] = await Promise.all([
-    api<{ grants: Grant[] }>('/grants'), api<{ invites: Invite[] }>('/invites'), api<{ tokens: { id: string; expiresAt: number }[] }>('/publisher-tokens'),
-  ]);
-  document.querySelector('#grant-list')!.innerHTML = grants.grants.map((g) => `<div class="access-row"><span>${esc(g.userName)} <small>@${esc(g.userHandle)} · ${g.scope === 'activity' ? B.activity : B.presence}</small></span><button data-delete="grants" data-id="${esc(g.id)}">${B.revoke}</button></div>`).join('') || `<p class="muted">${B.noGuests}</p>`;
-  document.querySelector('#invite-list')!.innerHTML = invites.invites.map((i) => `<div class="access-row"><span>${i.scope === 'activity' ? B.activity : B.presence}<small>${B.expires} ${esc(new Date(i.expiresAt).toLocaleString())}</small></span><button data-delete="invites" data-id="${esc(i.id)}">${B.revoke}</button></div>`).join('') || `<p class="muted">${B.noInvites}</p>`;
-  document.querySelector('#key-list')!.innerHTML = keys.tokens.map((k) => `<div class="access-row"><span>${B.publisher}<small>${B.expires} ${esc(new Date(k.expiresAt).toLocaleString())}</small></span><button data-delete="publisher-tokens" data-id="${esc(k.id)}">${B.revoke}</button></div>`).join('') || `<p class="muted">${B.noKeys}</p>`;
+async function renderKeys() {
+  const epoch = generation;
+  const data = await api<{ tokens: { id: string; expiresAt: number }[] }>('/publisher-tokens');
+  if (epoch !== generation || !session) return;
+  const list = root.querySelector('#key-list'); if (!list) return;
+  list.innerHTML = data.tokens.map((k) => `<div class="access-row"><span>${B.publisher}<small>${B.expires} ${esc(new Date(k.expiresAt).toLocaleString())}</small></span><button data-delete="publisher-tokens" data-id="${esc(k.id)}">${B.revoke}</button></div>`).join('') || `<p class="hint">${B.noKeys}</p>`;
 }
-
-async function openManage(section?: string) {
-  await controls();
-  const dialog = document.querySelector<HTMLDialogElement>('#manage-dialog')!;
-  if (!dialog.open) dialog.showModal();
-  if (section) document.getElementById(section)?.scrollIntoView({ block: 'start', behavior: 'instant' });
-}
-
-function clearDemo() { clearInterval(demoTimer); demoTimer = undefined; }
-async function publishDemo() {
-  const providers = ['claude', 'codex', 'cursor', 'gemini'];
-  const statuses = ['running', 'running', 'waiting', 'idle', 'running', 'completed', 'running', 'idle'];
-  await api('/publish', 'POST', { agents: Array.from({ length: 8 }, (_, i) => ({ id: `sim-${i}`, provider: providers[i % 4], status: statuses[(i + demoTick) % statuses.length] })) });
-  demoTick++;
-}
-
-async function toggleDemo() {
-  if (demoTimer) { clearDemo(); await api('/publish', 'POST', { agents: [] }); }
-  else {
-    if (session!.office.paused) session = await updateOffice({ paused: false });
-    await publishDemo();
-    demoTimer = setInterval(() => { void run(async () => { try { await publishDemo(); } catch (e) { clearDemo(); throw e; } }); }, 10_000);
-  }
-  await refresh();
-  document.querySelectorAll<HTMLButtonElement>('[data-action="demo"]').forEach((b) => { b.textContent = demoTimer ? B.stopDemo : B.startDemo; });
-}
-
-async function updateOffice(body: unknown): Promise<Session> {
-  await api('/office', 'POST', body);
-  return api<Session>('/session');
-}
-
-function inviteCode(value: string) {
-  const text = value.trim();
-  try { return new URLSearchParams(new URL(text).hash.slice(1)).get('invite') ?? text; }
-  catch { return text; }
-}
-
-async function accept(value: string) {
-  const token = inviteCode(value);
-  if (!token) throw new Error(B.linkInvalid);
-  const result = await api<{ officeId: string }>('/accept', 'POST', { token });
-  invitation = ''; sessionStorage.removeItem('building.invitation');
-  selected = result.officeId;
-  document.querySelector<HTMLDialogElement>('#accept-dialog')?.close();
-  await refresh(); message(B.joined);
-}
-
-root.addEventListener('change', (event) => {
-  if ((event.target as HTMLElement).id === 'language') setLang((event.target as HTMLSelectElement).value as 'en' | 'de');
-});
+function inviteCode(value: string) { try { return new URLSearchParams(new URL(value.trim()).hash.slice(1)).get('invite') ?? value.trim(); } catch { return value.trim(); } }
+async function logout() { generation++; await api('/logout', 'POST'); session = null; sharing = false; render(); }
 root.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const form = event.target as HTMLFormElement;
-  const data = Object.fromEntries(new FormData(form));
-  const submit = form.querySelector<HTMLButtonElement>('[type="submit"]')!;
-  submit.disabled = true;
+  event.preventDefault(); const form = event.target as HTMLFormElement; const data = Object.fromEntries(new FormData(form));
+  const button = form.querySelector<HTMLButtonElement>('[type="submit"]')!; button.disabled = true;
   void run(async () => {
-    if (form.id === 'auth-form') {
-      generation++;
-      session = await api<Session>(`/${authMode}`, 'POST', data);
-      selected = session.office.id;
-      renderShell(); await refresh();
-      if (invitation) document.querySelector<HTMLDialogElement>('#accept-dialog')!.showModal();
-    } else if (form.id === 'name-form') {
-      session = await updateOffice(data); await refresh(); message(B.saved);
+    if (form.id === 'auth-form') { generation++; session = await api<Session>(`/${authMode}`, 'POST', data); render(); }
+    else if (form.dataset.character) {
+      if (local) send({ type: 'office-character-save', id: form.dataset.character, ...data });
+      else { await api(`/characters/${encodeURIComponent(form.dataset.character)}`, 'POST', data); notice(B.characterSaved); }
     } else if (form.id === 'invite-form') {
-      const result = await api<{ token: string; expiresAt: number }>('/invites', 'POST', data);
-      const link = `${location.origin}${location.pathname}#invite=${encodeURIComponent(result.token)}`;
-      document.querySelector('#invite-result')!.innerHTML = `<p>${B.inviteReady}</p><textarea readonly aria-label="${B.token}">${esc(link)}</textarea><button data-action="copy-invite">${B.copy}</button>`;
-      await controls();
-    } else if (form.id === 'accept-form') await accept(String(data.token));
-  }).finally(() => { submit.disabled = false; });
+      const result = await api<{ token: string }>('/invites', 'POST', data);
+      const link = new URL(location.href); link.searchParams.delete('view'); link.hash = new URLSearchParams({ invite: result.token }).toString();
+      root.querySelector('#invite-result')!.innerHTML = `<p>${B.inviteReady}</p><textarea readonly aria-label="${B.token}">${esc(link.href)}</textarea><button data-action="copy">${B.copy}</button>`; await refreshFriends();
+    } else if (form.id === 'accept-form') {
+      const result = await api<{ officeId: string }>('/accept', 'POST', { token: inviteCode(String(data.token)) });
+      invitation = ''; sessionStorage.removeItem('building.invitation'); notice(B.joined); await refreshFriends();
+      send({ type: 'office-visit-floor', id: result.officeId });
+    } else if (form.id === 'name-form') { session = await api<Session>('/office', 'POST', data); notice(B.saved); }
+  }).finally(() => { button.disabled = false; });
 });
-
 root.addEventListener('click', (event) => {
-  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
-  if (!button) return;
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!button) return;
   void run(async () => {
-    if (button.dataset.floor) { selected = button.dataset.floor; renderFloors(); renderOffice(); return; }
-    if (button.dataset.delete && button.dataset.id) {
-      button.disabled = true;
-      try { await api(`/${button.dataset.delete}/${encodeURIComponent(button.dataset.id)}`, 'DELETE'); await controls(); }
-      finally { button.disabled = false; }
+    if (button.dataset.tab) { tab = button.dataset.tab as typeof tab; render(); return; }
+    if (button.dataset.floor) {
+      const data = { type: button.dataset.own === 'true' ? 'office-own-floor' : 'office-visit-floor', id: button.dataset.floor };
+      if (embedded) send(data); else { const url = new URL(location.href); url.searchParams.delete('view'); if (button.dataset.own !== 'true') { url.searchParams.set('source', 'shared'); url.searchParams.set('floor', button.dataset.floor); } location.assign(url); }
       return;
     }
+    if (button.dataset.delete) { await api(`/${button.dataset.delete}/${encodeURIComponent(button.dataset.id!)}`, 'DELETE'); if (button.dataset.delete === 'publisher-tokens') await renderKeys(); else await refreshFriends(); return; }
     switch (button.dataset.action) {
-      case 'auth-mode': authMode = authMode === 'register' ? 'login' : 'register'; renderAuth(); break;
-      case 'logout':
-        generation++;
-        await api('/logout', 'POST'); clearDemo(); session = null; floors = []; renderAuth(); break;
-      case 'close-dialog': button.closest('dialog')?.close(); break;
-      case 'manage': await openManage(); break;
-      case 'invite': await openManage('invite-section'); break;
-      case 'publisher': await openManage('publisher-section'); break;
-      case 'accept-open': document.querySelector<HTMLDialogElement>('#accept-dialog')!.showModal(); break;
-      case 'demo': await toggleDemo(); break;
-      case 'pause':
-        clearDemo(); session = await updateOffice({ paused: !session!.office.paused });
-        button.textContent = session.office.paused ? B.resume : B.pause;
-        rendered = ''; await refresh(); break;
+      case 'close': if (embedded) send({ type: 'office-menu-close' }); else location.assign('/'); break;
+      case 'own': send({ type: 'office-own-floor' }); break;
+      case 'auth-mode': authMode = authMode === 'register' ? 'login' : 'register'; render(); break;
+      case 'logout': if (sharing || pendingShare) { logoutPending = true; send({ type: 'office-share-stop' }); } else await logout(); break;
+      case 'share': pendingShare = true; renderSharingState(); send({ type: sharing ? 'office-share-stop' : 'office-share-start' }); break;
       case 'create-key': {
-        button.disabled = true;
-        try {
-          const result = await api<{ token: string }>('/publisher-tokens', 'POST');
-          document.querySelector('#key-result')!.innerHTML = `<p>${B.keyReady}</p><textarea readonly aria-label="${B.publisher}">${esc(result.token)}</textarea><button data-action="copy-key">${B.copyKey}</button>`;
-          await controls();
-        } finally { button.disabled = false; }
-        break;
+        const key = await api<{ token: string }>('/publisher-tokens', 'POST');
+        root.querySelector('#key-result')!.innerHTML = `<p>${B.keyReady}</p><textarea readonly aria-label="${B.publisher}">${esc(key.token)}</textarea><button data-action="copy">${B.copyKey}</button>`; await renderKeys(); break;
       }
-      case 'copy-invite': case 'copy-key': {
+      case 'copy': {
         const area = button.parentElement!.querySelector('textarea')!;
-        try { await navigator.clipboard.writeText(area.value); button.textContent = B.copied; }
-        catch { area.focus(); area.select(); }
+        try { await navigator.clipboard.writeText(area.value); button.textContent = B.copied; } catch { area.focus(); area.select(); }
         break;
       }
     }
   });
 });
 window.addEventListener('message', (event) => {
-  const frame = root.querySelector('iframe');
-  if (event.origin === location.origin && event.source === frame?.contentWindow && event.data?.type === 'office-access-lost') {
-    frame?.remove(); rendered = ''; message(B.noAccess, true); void refresh();
-  }
+  if (event.origin !== location.origin || event.source !== parent) return;
+  const data = event.data;
+  if (data?.type === 'office-local-characters') { local = data.local; localCharacters = data.characters; if (tab === 'characters' && local) renderCharacters(localCharacters); }
+  else if (data?.type === 'office-character-saved') { notice(B.characterSaved); }
+  else if (data?.type === 'office-sharing-state') { sharing = data.sharing; pendingShare = !!data.pending; renderSharingState(); }
+  else if (data?.type === 'office-sharing-stopped') { sharing = false; pendingShare = false; renderSharingState(); if (logoutPending) { logoutPending = false; void run(logout); } }
+  else if (data?.type === 'office-menu-error') notice(data.message, true);
 });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) void refresh(); });
-setInterval(() => { void refresh(); }, 5000);
-root.textContent = B.loading;
-void (async () => {
-  try {
-    session = await api<Session>('/session'); selected = session.office.id;
-    renderShell(); await refresh();
-    if (invitation) document.querySelector<HTMLDialogElement>('#accept-dialog')!.showModal();
-  } catch (error) {
-    renderAuth();
-    if (!(error instanceof ApiError && error.status === 401)) message(error instanceof Error ? error.message : B.genericError, true);
-  }
-})();
+render(); send({ type: 'office-menu-ready' });
+const initialGeneration = generation;
+void (async () => { try { const result = await api<Session>('/session'); if (initialGeneration !== generation) return; session = result; render(); } catch (error) { if (initialGeneration === generation && !(error instanceof ApiError && error.status === 401)) notice(B.genericError, true); } })();
+setInterval(() => { void refreshFriends(); }, 5000);
