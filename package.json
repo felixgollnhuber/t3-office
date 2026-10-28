@@ -41,7 +41,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -p . && tsc -p tsconfig.node.json",
     "add-set": "node scripts/add-set.mjs",
-    "test": "node --experimental-strip-types --test server/building.test.ts scripts/bridge.test.mjs",
+    "test": "node --experimental-strip-types --test server/building.test.ts server/accounting.test.ts scripts/bridge.test.mjs",
     "bridge": "node scripts/bridge.mjs",
     "serve": "vite preview",
     "test:e2e": "node scripts/menu-races.mjs && node scripts/smoke.mjs",

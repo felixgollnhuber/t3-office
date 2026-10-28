@@ -1,3 +1,4 @@
+import { processedTokens } from './tokens.ts';
 import type { Plugin, PreviewServer, ViteDevServer } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFile } from 'node:child_process';
@@ -236,7 +237,6 @@ function turnCost(model: string, u: TurnUsage) {
   );
 }
 
-const freshTokens = (u: TurnUsage) => Math.max(0, (u.inputTokens ?? 0) - (u.cachedInputTokens ?? 0)) + (u.outputTokens ?? 0);
 
 // ---------------------------------------------------------------- activity labels
 
@@ -877,7 +877,7 @@ function snapshot(hours: number, seats: number) {
     for (const t of turns) {
       const ttu = json<TurnUsage>(t.ttu);
       if (ttu) {
-        tokens += freshTokens(ttu);
+        tokens += processedTokens(ttu);
         cost += turnCost(model, ttu);
       }
       const tu = json<{ usedTokens?: number; maxTokens?: number; updatedAt?: string }>(t.tu);
@@ -1064,7 +1064,7 @@ function snapshot(hours: number, seats: number) {
   };
   kept.sort((a, b) => depth(a) - depth(b) || prio[a.status] - prio[b.status] || b.updatedAt - a.updatedAt);
 
-  // today's totals: finished runs, fresh tokens and API-equivalent cost since local midnight
+  // today's totals: finished runs, processed tokens (including cache hits) and API-equivalent cost since local midnight
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
   const dayIso = midnight.toISOString();
@@ -1079,7 +1079,7 @@ function snapshot(hours: number, seats: number) {
   for (const r of turnRows) {
     const u = json<TurnUsage>(r.ttu);
     if (!u) continue;
-    dayTokens += freshTokens(u);
+    dayTokens += processedTokens(u);
     dayCost += turnCost(str(r.model), u);
   }
   const queued = activeRuns.filter((r) => str(r.status) === 'queued').length;

@@ -24,6 +24,8 @@ export interface CostData {
   readAt: string;
   cacheAt: string | null;
   liveFiles: number;
+  cacheVersion?: number;
+  readFailures?: number;
   resolution: 'day' | 'hour';
   sinceDay: string;
   untilDay: string;
@@ -280,7 +282,7 @@ export class CostView {
     const meta =
       d.source === 'demo'
         ? `${period} · <b class="cv-stamp">${S.demoStamp}</b> ${S.demoRest}`
-        : `${period} · ${S.asOf(hhmm(d.readAt))} · ${S.scan(hhmm(d.cacheAt))}${d.liveFiles ? S.liveFiles(String(d.liveFiles)) : ''}${busy ? ` · <b>${S.busy}</b>` : ''}`;
+        : `${period} · ${S.asOf(hhmm(d.readAt))} · ${S.scan(hhmm(d.cacheAt))}${d.cacheVersion ? ` · ${S.cacheVersion(d.cacheVersion)}` : ''}${d.liveFiles ? S.liveFiles(String(d.liveFiles)) : ''}${d.readFailures ? ` · <b>${S.partialUsage}</b>` : ''}${busy ? ` · <b>${S.busy}</b>` : ''}`;
     const total = this.metric === 'cost' ? d.totals.costUsd : d.totals.totalTokens;
     const kinds = ORDER.filter((k) => d.providers.some((p) => p.provider === k));
 

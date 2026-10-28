@@ -33,6 +33,8 @@ export const S = locale({
     demoRest: 'without T3',
     asOf: (time: string) => `as of ${time}`,
     scan: (time: string) => `T3 scan ${time}`,
+    cacheVersion: (version: number) => `cache v${version}`,
+    partialUsage: 'Some files could not be refreshed; showing their last cached usage.',
     liveFiles: (n: string) => ` + ${n} live transcripts`,
     busy: 'printing …',
     // total and providers
@@ -149,6 +151,8 @@ export const S = locale({
     demoRest: 'ohne T3',
     asOf: (time: string) => `Stand ${time}`,
     scan: (time: string) => `T3-Scan ${time}`,
+    cacheVersion: (version: number) => `Cache v${version}`,
+    partialUsage: 'Einige Dateien konnten nicht aktualisiert werden; ihre letzten Cache-Werte werden angezeigt.',
     liveFiles: (n: string) => ` + ${n} Transkripte live`,
     busy: 'druckt …',
     totalCost: (n: string) => `${n} Sessions · API-Schätzung`,

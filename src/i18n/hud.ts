@@ -46,7 +46,7 @@ export const S = locale({
 
     // receipt
     receipt: 'Receipt · today',
-    receiptHint: 'Completed T3 runs since local midnight; estimated API cost. Provider sessions outside T3 and detailed usage use a different scope.',
+    receiptHint: 'Completed T3 turns since local midnight. Processed tokens include cached input; cost is an API estimate. Detailed usage also includes provider sessions outside T3.',
     cost: 'Cost',
     flatWhites: (n: number) => `= ${n} ${plural(n, 'flat white', 'flat whites')}`,
 
@@ -102,7 +102,7 @@ export const S = locale({
     noLikes: 'Noch nichts gemerkt. Drück ♡ beim Track.',
 
     receipt: 'Kassenbon · heute',
-    receiptHint: 'Abgeschlossene T3-Läufe seit lokaler Mitternacht; geschätzte API-Kosten. Anbietersitzungen außerhalb von T3 und die Detailansicht haben einen anderen Umfang.',
+    receiptHint: 'Abgeschlossene T3-Turns seit lokaler Mitternacht. Verarbeitete Tokens enthalten Cache-Input; Kosten sind eine API-Schätzung. Die Detailansicht enthält auch Anbietersitzungen außerhalb von T3.',
     cost: 'Kosten',
     flatWhites: (n) => `= ${n} Flat Whites`,
 

@@ -54,9 +54,11 @@ CLI IDs are stable across restarts with the same key so server-side names/areas 
 
 ## Usage figures
 
-The small **Receipt · today** is an estimate from completed T3 turns since local midnight. Its token count excludes cached input tokens. The detailed usage view aggregates provider-native sessions over its selected time range, including cached tokens and potentially sessions outside T3. Its results can be cached for 45 seconds. The receipt uses a simpler price calculation than the detailed view (which also handles pricing aliases/overrides, speed tiers and reported costs).
+The small **Receipt · today** counts processed tokens from completed T3 turns since local midnight, including cached input once. Reasoning tokens are already part of output and are not added again. This fixes the earlier receipt undercount. Its cost remains a simpler API-price estimate.
 
-These figures are not automatically comparable to each other or to subscription billing. The public/static demo is simulated. To investigate a discrepancy with T3 Code, compare the same detailed view, time range, timezone and refresh time, then record both cost and token values. No actual discrepancy has been confirmed without those matching figures; the existing calculations have not been silently changed.
+The detailed usage view aggregates provider-native sessions over its selected range, including sessions outside T3. The reader now supports T3 Code 0.1.3’s v9 scan cache and older v5–v8 caches, uses the newest supported generation without merging overlapping caches, and validates cumulative Codex counters. Equal-sized genuine requests are counted; duplicate events and copied fork history are not. Append checkpoints validate their prefix, final JSONL tails count once, large files are read fully, and retained deleted-session history is preserved. Billing-model hints respect user overrides and aliases. Read failures are reported rather than presenting an uncached partial total as complete.
+
+The detail receipt shows its cache version and source refresh time; results may be cached for 45 seconds. These figures still need matching ranges, timezone and source scope for comparison, and API estimates are separate from subscription billing. The public/static demo is simulated. Confirmed implementation defects were fixed using synthetic regression fixtures and comparison with installed application code; the user’s exact paired figures have not been numerically reconciled.
 
 ## Verification
 
