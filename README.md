@@ -80,3 +80,9 @@ Tests use synthetic accounts/sources and an isolated database. Browser checks co
 - [SECURITY.md](SECURITY.md): privacy boundaries.
 
 The existing starter history and Felix Gollnhuber's MIT license/authorship are retained. No external fork or remote repository has been created. Continuous 3D elevator travel, chat and remote agent control are outside this release. Created in [T3 Code](https://t3.codes).
+
+## Try a simulated friend
+
+Run `npm run demo:friends`, then open http://127.0.0.1:5175/preview/start for your simulated office or http://127.0.0.1:5175/preview/visit to visit Maya directly. Friends → Elevator shows both floors. Maya has eight synthetic coworkers with changing status, chosen names/work areas and a warm lounge style. The preview banner links between both offices.
+
+This is a disposable, loopback-only demo with automatically signed-in synthetic accounts and an accepted synthetic invitation. It uses a temporary database, disables private T3 endpoints and never publishes real activity. The separate `127.0.0.1` host keeps its cookies apart from the normal `localhost` office; do not use it as a public service. Ctrl+C stops the simulation and removes its temporary database on clean shutdown. Restarting creates a fresh demo. Optional verification: `node scripts/friend-preview.mjs --check-browser`.

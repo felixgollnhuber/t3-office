@@ -1,0 +1,133 @@
+/** Isolated, loopback-only two-player demonstration. Never uses real T3 data or accounts. */
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const checking = process.argv.includes('--check');
+const browserCheck = process.argv.includes('--check-browser');
+const index = process.argv.indexOf('--port');
+const port = checking || browserCheck ? 0 : index < 0 ? 5175 : Number(process.argv[index + 1]);
+if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Choose a valid local port.');
+const directory = await mkdtemp(join(tmpdir(), 'office-friend-preview-'));
+process.env.BUILDING_DB = join(directory, 'demo.sqlite');
+delete process.env.T3_LOCAL_DATA;
+const { createServer } = await import('vite');
+let visitorCookie = '';
+let floorId = '';
+let interval;
+let browser;
+let stopping = false;
+const banner = `<script type="module">
+if (window === parent) {
+ const bar = document.createElement('aside'); bar.id = 'friend-preview-banner';
+ bar.style.cssText = 'position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:9990;background:#f8f3de;color:#263a34;border:2px solid #263a34;padding:10px 14px;font:14px monospace;max-width:94vw;box-sizing:border-box;display:flex;gap:12px;flex-wrap:wrap;justify-content:center';
+ const label = document.createElement('span'); label.textContent = location.search.includes('source=shared') ? 'SIMULATION · Visiting Maya’s office' : 'SIMULATION · Your office · no real activity';
+ const visit = document.createElement('a'); visit.href='/preview/visit'; visit.textContent='Visit Maya';
+ const home = document.createElement('a'); home.href='/preview/start'; home.textContent='Your demo office';
+ for (const a of [visit,home]) a.style.color='#263a34';
+ bar.append(label,visit,home); document.body.append(bar);
+}
+</script>`;
+const server = await createServer({
+  root: fileURLToPath(new URL('..', import.meta.url)),
+  server: { host: '127.0.0.1', port, strictPort: true }, logLevel: 'error',
+  plugins: [{ name: 'isolated-friend-preview', enforce: 'pre',
+    transformIndexHtml(html) { return html.replace("if (location.hostname === '127.0.0.1')", 'if (false)').replace('</body>', `${banner}</body>`); },
+    configureServer(s) { s.middlewares.use((req, res, next) => {
+      if (req.headers.host?.split(':')[0] !== '127.0.0.1') {
+        const address = s.httpServer.address();
+        res.statusCode = 302; res.setHeader('Location', `http://127.0.0.1:${address.port}${req.url?.startsWith('/') ? req.url : '/'}`); res.end(); return;
+      }
+      const path = (req.url ?? '').split('?')[0];
+      if (!['/preview/start', '/preview/visit'].includes(path)) return next();
+      if (req.method !== 'GET') { res.statusCode = 405; res.end(); return; }
+      res.setHeader('Cache-Control', 'no-store');
+      if (!visitorCookie) { res.statusCode = 503; res.end('Preparing synthetic building…'); return; }
+      // Automatic sign-in is deliberately confined to this disposable demo server.
+      res.setHeader('Set-Cookie', `${visitorCookie}; Path=/; HttpOnly; SameSite=Strict`);
+      res.statusCode = 302;
+      res.setHeader('Location', path === '/preview/visit' ? `/?source=shared&floor=${floorId}&weather=clear` : '/?source=demo&agents=6&weather=clear');
+      res.end();
+    }); },
+  }],
+});
+async function stop() {
+  if (stopping) return;
+  stopping = true; clearInterval(interval);
+  await browser?.close(); await server.close();
+  await rm(directory, { recursive: true, force: true });
+}
+process.once('SIGINT', () => { void stop(); });
+process.once('SIGTERM', () => { void stop(); });
+try {
+  await server.listen();
+  const base = server.resolvedUrls.local[0];
+  const call = async (path, body, cookie = '', method = body === undefined ? 'GET' : 'POST') => {
+    const res = await fetch(`${base}api/building${path}`, { method, headers: { ...(cookie ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(`${path}: ${res.status} ${data.error}`);
+    return { data, cookie: res.headers.get('set-cookie')?.split(';')[0] ?? cookie };
+  };
+  const create = (handle, name) => call('/register', { handle, name, password: randomUUID() });
+  const friend = await create('maya_demo', 'Maya (simulated)');
+  const visitor = await create('you_demo', 'You (simulated)');
+  visitorCookie = visitor.cookie; floorId = friend.data.office.id;
+  await call('/office', { name: 'Maya’s creative studio · simulation', appearance: { theme: 'loft', layout: 'lounge', lighting: 'warm' } }, friend.cookie);
+  await call('/office', { name: 'Your demo office' }, visitor.cookie);
+  const invite = await call('/invites', { scope: 'activity' }, friend.cookie);
+  await call('/accept', { token: invite.data.token }, visitor.cookie);
+  const names = ['Nova', 'Pixel', 'Echo', 'Atlas', 'Quinn', 'Rui', 'Sage', 'Orbit'];
+  const areas = ['design', 'design', 'frontend', 'frontend', 'backend', 'backend', 'testing', 'research'];
+  const statuses = ['running', 'running', 'waiting', 'idle'];
+  let step = 0;
+  const publish = () => call('/publish', { agents: names.map((_, i) => ({ id: `demo-agent-${i}`, provider: i % 2 ? 'claude' : 'codex', status: statuses[(i + step) % statuses.length] })) }, friend.cookie);
+  await publish();
+  for (const [i, name] of names.entries()) await call(`/characters/demo-agent-${i}`, { name, area: areas[i] }, friend.cookie);
+  if (checking || browserCheck) {
+    const headers = { Cookie: visitorCookie };
+    const before = await call(`/offices/${floorId}`, undefined, visitorCookie);
+    assert.equal(before.data.agents.length, 8);
+    assert.equal(before.data.office.appearance.layout, 'lounge');
+    step++; await publish();
+    const after = await call(`/offices/${floorId}`, undefined, visitorCookie);
+    assert.ok(after.data.agents.some((agent, i) => agent.status !== before.data.agents[i].status));
+    assert.equal(after.data.agents[0].name, 'Nova');
+    assert.equal((await fetch(`${base}api/building/offices/${floorId}`)).status, 401);
+    assert.equal((await fetch(`${base}api/t3/status`, { headers })).status, 404);
+    const alternate = new URL(base); alternate.hostname = 'localhost';
+    const redirected = await fetch(`${alternate}preview/start`, { redirect: 'manual' });
+    assert.equal(redirected.headers.has('set-cookie'), false);
+    assert.ok(redirected.headers.get('location').startsWith('http://127.0.0.1:'));
+    const entry = await fetch(`${base}preview/start`, { redirect: 'manual' });
+    assert.equal(entry.status, 302); assert.ok(entry.headers.get('set-cookie')?.includes('HttpOnly'));
+    const floors = await call('/floors', undefined, visitorCookie); assert.equal(floors.data.floors.length, 2);
+    if (browserCheck) {
+      const { chromium } = await import('playwright');
+      browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-webgl'] });
+      const page = await browser.newPage({ viewport: { width: 1100, height: 760 } });
+      const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+      await page.goto(`${base}preview/visit`);
+      await page.waitForFunction(() => window.__source?.threads().length === 8);
+      assert.equal(await page.locator('#friend-preview-banner').isVisible(), true);
+      assert.equal(await page.locator('body').getAttribute('data-office-theme'), 'loft');
+      await page.getByRole('button', { name: 'Friends & characters', exact: true }).click();
+      const menu = page.frameLocator('.office-friends-dialog iframe');
+      await menu.locator('#floor-list .floor').nth(1).waitFor();
+      assert.equal(await menu.locator('#floor-list .floor').count(), 2);
+      await menu.getByRole('button', { name: 'Close', exact: true }).click();
+      await page.getByRole('link', { name: 'Your demo office', exact: true }).click();
+      await page.waitForURL(/source=demo/);
+      await page.waitForFunction(() => window.__source?.threads().length >= 6 && !document.body.classList.contains('shared-office')); 
+      assert.deepEqual(errors, []);
+    }
+    console.log('PASS: isolated two-player preview, accepted invitation, changing synthetic agents, saved style, elevator, home and private API isolation.');
+    await stop();
+  } else {
+    let busy = false;
+    interval = setInterval(async () => { if (busy) return; busy = true; try { step++; await publish(); } catch (e) { console.error('Simulation paused:', e.message); clearInterval(interval); } finally { busy = false; } }, 8000);
+    console.log(`Your demo office: ${base}preview/start\nVisit Maya: ${base}preview/visit\nDisposable synthetic building only. Ctrl+C stops it and removes its temporary database.`);
+  }
+} catch (error) { await stop(); throw error; }
