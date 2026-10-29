@@ -1,3 +1,4 @@
+import { travelToFloor } from './elevator';
 import { readProfiles, saveProfile } from './character-profiles';
 import { isCharacterStyle, cleanCharacterStyle } from './character-style';
 import { isAppearance } from './appearance';
@@ -31,7 +32,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
   document.body.append(floating);
   if (shared) {
     const home = document.createElement('button'); home.className = 'office-home-launcher'; home.textContent = `← ${B.own}`;
-    home.addEventListener('click', () => { const own = new URL(location.href); own.searchParams.delete('source'); own.searchParams.delete('floor'); location.assign(own); });
+    home.addEventListener('click', () => { void travelToFloor(null); });
     document.body.append(home);
   }
   const dialog = document.createElement('dialog');
@@ -122,9 +123,9 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
     } else if (data.type === 'office-menu-close') dialog.close();
     else if (data.type === 'office-own-floor') {
       if (!shared) return dialog.close();
-      const own = new URL(location.href); own.searchParams.delete('source'); own.searchParams.delete('floor'); location.assign(own);
+      dialog.close(); void travelToFloor(null);
     } else if (data.type === 'office-visit-floor' && typeof data.id === 'string' && /^[\w-]+$/.test(data.id)) {
-      const visit = new URL(location.href); visit.searchParams.set('source', 'shared'); visit.searchParams.set('floor', data.id); location.assign(visit);
+      dialog.close(); void travelToFloor(data.id);
     } else if (data.type === 'office-share-start' && !shared) {
       const generation = ++publisherGeneration;
       pending = true;

@@ -21,12 +21,15 @@ let interval;
 let browser;
 let stopping = false;
 const banner = `<script type="module">
+import { travelToFloor } from "/src/elevator.ts";
 if (window === parent) {
  const bar = document.createElement('aside'); bar.id = 'friend-preview-banner';
  bar.style.cssText = 'position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:9990;background:#f8f3de;color:#263a34;border:2px solid #263a34;padding:10px 14px;font:14px monospace;max-width:94vw;box-sizing:border-box;display:flex;gap:12px;flex-wrap:wrap;justify-content:center';
  const label = document.createElement('span'); label.textContent = location.search.includes('source=shared') ? 'SIMULATION · Visiting Maya’s office' : 'SIMULATION · Your office · no real activity';
  const visit = document.createElement('a'); visit.href='/preview/visit'; visit.textContent='Visit Maya';
  const home = document.createElement('a'); home.href='/preview/start'; home.textContent='Your demo office';
+ visit.addEventListener('click', event => { event.preventDefault(); void travelToFloor(__DEMO_FLOOR__); });
+ home.addEventListener('click', event => { event.preventDefault(); void travelToFloor(null); });
  for (const a of [visit,home]) a.style.color='#263a34';
  bar.append(label,visit,home); document.body.append(bar);
 }
@@ -35,7 +38,7 @@ const server = await createServer({
   root: fileURLToPath(new URL('..', import.meta.url)),
   server: { host: '127.0.0.1', port, strictPort: true }, logLevel: 'error',
   plugins: [{ name: 'isolated-friend-preview', enforce: 'pre',
-    transformIndexHtml(html) { return html.replace("if (location.hostname === '127.0.0.1')", 'if (false)').replace('</body>', `${banner}</body>`); },
+    transformIndexHtml(html) { return html.replace("if (location.hostname === '127.0.0.1')", 'if (false)').replace('</body>', `${banner.replace('__DEMO_FLOOR__', JSON.stringify(floorId))}</body>`); },
     configureServer(s) { s.middlewares.use((req, res, next) => {
       if (req.headers.host?.split(':')[0] !== '127.0.0.1') {
         const address = s.httpServer.address();
@@ -49,7 +52,7 @@ const server = await createServer({
       // Automatic sign-in is deliberately confined to this disposable demo server.
       res.setHeader('Set-Cookie', `${visitorCookie}; Path=/; HttpOnly; SameSite=Strict`);
       res.statusCode = 302;
-      res.setHeader('Location', path === '/preview/visit' ? `/?source=shared&floor=${floorId}&weather=clear` : '/?source=demo&agents=6&weather=clear');
+      res.setHeader('Location', path === '/preview/visit' ? `/?source=shared&floor=${floorId}&weather=clear&agents=6` : '/?source=demo&agents=6&weather=clear');
       res.end();
     }); },
   }],
@@ -119,8 +122,9 @@ try {
       assert.equal(await menu.locator('#floor-list .floor').count(), 2);
       await menu.getByRole('button', { name: 'Close', exact: true }).click();
       await page.getByRole('link', { name: 'Your demo office', exact: true }).click();
-      await page.waitForURL(/source=demo/);
+      await page.waitForURL(url => !url.searchParams.has('floor'));
       await page.waitForFunction(() => window.__source?.threads().length >= 6 && !document.body.classList.contains('shared-office')); 
+      await page.locator('.elevator-overlay').waitFor({ state: 'detached' });
       assert.deepEqual(errors, []);
     }
     console.log('PASS: isolated two-player preview, accepted invitation, changing synthetic agents, saved style, elevator, home and private API isolation.');

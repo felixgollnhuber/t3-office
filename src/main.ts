@@ -464,6 +464,9 @@ async function main() {
     Object.assign(goal, { ...HOME, px: 0, py: 0 });
     zoomTarget = 1;
   };
+  window.addEventListener('office-departure', () => { closeFocus(true); zoomTarget = 1.6; });
+  window.addEventListener('office-travel-cancel', homeView);
+  window.addEventListener('office-arrival-start', () => { zoomF = 1.45; zoomTarget = 1; });
   /** the height the camera aims at: about the chest of a person */
   const LOOK_Y = 1;
   const basis = (azDeg: number, elDeg: number) => {
@@ -805,7 +808,7 @@ async function main() {
       document.body.classList.toggle('night', cycle.lampLevel > 0.55);
     }
 
-    if (++frames === 3) (window as unknown as { __ready: boolean }).__ready = true;
+    if (++frames === 3) { (window as unknown as { __ready: boolean }).__ready = true; window.dispatchEvent(new Event('office-ready')); }
     requestAnimationFrame(loop);
   };
   loop();
@@ -819,4 +822,5 @@ main().catch((error) => {
   const home = document.createElement('a'); home.href = '/'; home.textContent = 'Return to your office';
   message.append(document.createElement('br'), home);
   document.body.replaceChildren(message);
+  window.dispatchEvent(new Event('office-load-error'));
 });

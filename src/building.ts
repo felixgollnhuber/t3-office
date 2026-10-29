@@ -1,3 +1,4 @@
+import { travelToFloor } from './elevator';
 import { settings } from './settings';
 import { DEFAULT_APPEARANCE, isAppearance, OFFICE_LAYOUTS, OFFICE_LIGHTING, type Appearance } from './appearance';
 /** Optional friends menu embedded in the original office. Own-office use never requires a building account. */
@@ -155,14 +156,14 @@ root.addEventListener('click', (event) => {
     if (button.dataset.tab) { tab = button.dataset.tab as typeof tab; render(); return; }
     if (button.dataset.floor) {
       const data = { type: button.dataset.own === 'true' ? 'office-own-floor' : 'office-visit-floor', id: button.dataset.floor };
-      if (embedded) send(data); else { const url = new URL(location.href); url.searchParams.delete('view'); if (button.dataset.own !== 'true') { url.searchParams.set('source', 'shared'); url.searchParams.set('floor', button.dataset.floor); } location.assign(url); }
+      if (embedded) send(data); else { void travelToFloor(button.dataset.own === 'true' ? null : button.dataset.floor); }
       return;
     }
     if (button.dataset.delete) { await api(`/${button.dataset.delete}/${encodeURIComponent(button.dataset.id!)}`, 'DELETE'); if (button.dataset.delete === 'publisher-tokens') await renderKeys(); else await refreshFriends(); return; }
     switch (button.dataset.action) {
       case 'refresh-access': await refreshFriends(); break;
       case 'close': if (embedded) send({ type: 'office-menu-close' }); else location.assign('/'); break;
-      case 'own': send({ type: 'office-own-floor' }); break;
+      case 'own': if (embedded) send({ type: 'office-own-floor' }); else void travelToFloor(null); break;
       case 'auth-mode': authMode = authMode === 'register' ? 'login' : 'register'; render(); break;
       case 'logout': if (sharing || pendingShare) { logoutPending = true; send({ type: 'office-share-stop' }); } else await logout(); break;
       case 'share': pendingShare = true; renderSharingState(); send({ type: sharing ? 'office-share-stop' : 'office-share-start' }); break;
