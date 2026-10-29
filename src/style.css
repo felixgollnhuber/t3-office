@@ -789,3 +789,7 @@ body.kiosk .office-friends-launcher { display: block; }
 .shared-connection-cover a { color: inherit; }
 
 .office-home-launcher { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 40; background: var(--paper, #e9e5d2); color: var(--ink, #273c34); border: 2px solid currentColor; padding: 10px 16px; font: inherit; cursor: pointer; }
+
+.office-building-launcher { position: fixed; left: 16px; bottom: 16px; z-index: 45; color: var(--ink,#263d37); background: var(--paper,#f0ead9); border: 2px solid currentColor; padding: 10px 16px; font: 18px 'Pixelify Sans',monospace; cursor: pointer; }
+.office-building-launcher:focus-visible { outline: 3px solid var(--accent,#d9b56a); outline-offset: 3px; }
+@media(max-width:700px) { .office-building-launcher { top: 12px; bottom: auto; left: 12px; font-size: 14px; padding: 8px; } .office-home-launcher { top: 64px; left: 12px; transform: none; } }

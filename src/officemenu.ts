@@ -51,6 +51,10 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
   } else url.hash = '';
   frame.src = url.href;
   dialog.append(frame); document.body.append(dialog);
+  const buildingButton = document.createElement('button'); buildingButton.className = 'office-building-launcher'; buildingButton.textContent = B.buildingView;
+  buildingButton.addEventListener('click', () => { dialog.close(); void import('./building-view').then(({ openBuildingView }) => openBuildingView(() => dialog.showModal())); });
+  document.body.append(buildingButton);
+  if (new URLSearchParams(location.search).get('building') === '1') window.addEventListener('office-ready', () => { const next = new URL(location.href); next.searchParams.delete('building'); history.replaceState(null, '', next); buildingButton.click(); }, { once: true });
   button.addEventListener('click', () => dialog.showModal());
   floating.addEventListener('click', () => dialog.showModal());
   dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
@@ -112,6 +116,8 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
       localStorage.setItem('office.appearance.v1', JSON.stringify(data.appearance));
       if (settings.get('theme') !== data.appearance.theme) { settings.set('theme', data.appearance.theme); return; }
       const next = new URL(location.href); next.searchParams.delete('theme'); location.assign(next);
+    } else if (data.type === 'office-open-building') {
+      dialog.close(); buildingButton.click();
     } else if (data.type === 'office-character-select' && !shared && typeof data.id === 'string') {
       if (source.threads().some((t) => t.id === data.id)) { dialog.close(); selectCharacter?.(data.id); }
     } else if (data.type === 'office-character-save' && !shared) {

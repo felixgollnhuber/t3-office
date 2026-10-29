@@ -45,14 +45,14 @@ const server = await createServer({
         res.statusCode = 302; res.setHeader('Location', `http://127.0.0.1:${address.port}${req.url?.startsWith('/') ? req.url : '/'}`); res.end(); return;
       }
       const path = (req.url ?? '').split('?')[0];
-      if (!['/preview/start', '/preview/visit'].includes(path)) return next();
+      if (!['/preview/start', '/preview/visit', '/preview/building'].includes(path)) return next();
       if (req.method !== 'GET') { res.statusCode = 405; res.end(); return; }
       res.setHeader('Cache-Control', 'no-store');
       if (!visitorCookie) { res.statusCode = 503; res.end('Preparing synthetic building…'); return; }
       // Automatic sign-in is deliberately confined to this disposable demo server.
       res.setHeader('Set-Cookie', `${visitorCookie}; Path=/; HttpOnly; SameSite=Strict`);
       res.statusCode = 302;
-      res.setHeader('Location', path === '/preview/visit' ? `/?source=shared&floor=${floorId}&weather=clear&agents=6` : '/?source=demo&agents=6&weather=clear');
+      res.setHeader('Location', path === '/preview/visit' ? `/?source=shared&floor=${floorId}&weather=clear&agents=6` : path === '/preview/building' ? '/?source=demo&agents=6&weather=clear&building=1' : '/?source=demo&agents=6&weather=clear');
       res.end();
     }); },
   }],
@@ -125,6 +125,15 @@ try {
       await page.waitForURL(url => !url.searchParams.has('floor'));
       await page.waitForFunction(() => window.__source?.threads().length >= 6 && !document.body.classList.contains('shared-office')); 
       await page.locator('.elevator-overlay').waitFor({ state: 'detached' });
+      await page.getByRole('button', { name: 'Building view', exact: true }).click();
+      await page.locator('.building-world[data-rendered=true]').waitFor();
+      await page.locator('.building-world-directory button').nth(1).waitFor();
+      await page.locator(`.building-world-directory [data-floor="${floorId}"]`).click();
+      await page.getByRole('button', { name: 'Enter this office', exact: true }).click();
+      await page.waitForURL(url => url.searchParams.get('floor') === floorId);
+      await page.locator('.elevator-overlay').waitFor({ state: 'detached' });
+      await page.waitForFunction(() => window.__source?.threads().length === 8 && window.__ready);
+      assert.equal(await page.locator('.building-world').count(), 0);
       assert.deepEqual(errors, []);
     }
     console.log('PASS: isolated two-player preview, accepted invitation, changing synthetic agents, saved style, elevator, home and private API isolation.');
@@ -132,6 +141,6 @@ try {
   } else {
     let busy = false;
     interval = setInterval(async () => { if (busy) return; busy = true; try { step++; await publish(); } catch (e) { console.error('Simulation paused:', e.message); clearInterval(interval); } finally { busy = false; } }, 8000);
-    console.log(`Your demo office: ${base}preview/start\nVisit Maya: ${base}preview/visit\nDisposable synthetic building only. Ctrl+C stops it and removes its temporary database.`);
+    console.log(`Whole building: ${base}preview/building\nYour demo office: ${base}preview/start\nVisit Maya: ${base}preview/visit\nDisposable synthetic building only. Ctrl+C stops it and removes its temporary database.`);
   }
 } catch (error) { await stop(); throw error; }

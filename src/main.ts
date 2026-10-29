@@ -685,6 +685,7 @@ async function main() {
     const t = performance.now();
     const dt = Math.min(0.05, (t - last) / 1000);
     last = t;
+    if (document.body.classList.contains('building-view-open')) { source.update(dt); requestAnimationFrame(loop); return; }
     const now = clock.now();
 
     director.update(dt);
