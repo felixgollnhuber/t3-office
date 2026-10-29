@@ -1,9 +1,12 @@
+import type { Appearance } from './appearance';
 /** An office receives only the server-authorized, anonymized activity snapshot. Fail closed on every read error. */
 import { api, ApiError, type OfficeSnapshot } from './building-api';
 import type { AgentSource, SourceEvent, Thread } from './source';
 import { B } from './i18n/building';
 
 export class SharedSource implements AgentSource {
+  appearance?: Appearance;
+  private hasSnapshot = false;
   private list: Thread[] = [];
   private listeners: ((e: SourceEvent) => void)[] = [];
   private inflight = false;
@@ -34,6 +37,9 @@ export class SharedSource implements AgentSource {
     try {
       const snap = await api<OfficeSnapshot>(`/offices/${encodeURIComponent(this.officeId)}`);
       if (!Array.isArray(snap.agents)) throw new Error('Invalid shared office snapshot.');
+      if (this.hasSnapshot && JSON.stringify(this.appearance) !== JSON.stringify(snap.office.appearance)) { location.reload(); return; }
+      this.appearance = snap.office.appearance;
+      this.hasSnapshot = true;
       if (this.disconnected) { location.reload(); return; }
       if (!snap.agents.length && this.list.length) {
         // A pause/offline snapshot must clear old actors and inspector history, not animate them leaving.

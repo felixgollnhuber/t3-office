@@ -787,3 +787,5 @@ body.phone .focus-view:not(.dock) {
 body.kiosk .office-friends-launcher { display: block; }
 .shared-connection-cover { position: fixed; inset: 0; z-index: 1000; display: grid; place-content: center; gap: 18px; padding: 30px; text-align: center; background: var(--paper); color: var(--ink); }
 .shared-connection-cover a { color: inherit; }
+
+.office-home-launcher { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 40; background: var(--paper, #e9e5d2); color: var(--ink, #273c34); border: 2px solid currentColor; padding: 10px 16px; font: inherit; cursor: pointer; }

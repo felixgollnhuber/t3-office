@@ -1,3 +1,5 @@
+import { DEFAULT_APPEARANCE, isAppearance } from './appearance';
+import { styleRoom } from './roomstyle';
 import * as THREE from 'three';
 import '@fontsource/pixelify-sans/700.css';
 import '@fontsource/silkscreen/400.css';
@@ -38,7 +40,8 @@ async function main() {
   const params = new URLSearchParams(location.search);
   const ZOOM = Number(params.get('zoom') ?? 11);
   // settings come from the store; URL parameters (?theme=, ?lat=, ?px= …) win there for this page view
-  const theme = THEMES.find((t) => t.id === settings.get('theme')) ?? THEMES[0];
+  let appearance = { ...DEFAULT_APPEARANCE, theme: settings.get('theme') };
+  try { const stored = JSON.parse(localStorage.getItem('office.appearance.v1') ?? 'null'); if (isAppearance(stored)) appearance = { ...stored, theme: settings.get('theme') }; } catch { /* defaults */ }
   // art pixel size in device pixels: 3 on retina (a bit finer than before), 2 on 1x screens
   const pixelFor = (dpr: number) => (settings.get('pixel') ? Math.max(1, Math.round(settings.get('pixel') * dpr)) : Math.max(2, Math.round(1.5 * dpr)));
 
@@ -49,8 +52,6 @@ async function main() {
     document.fonts.load('8px "Silkscreen"'),
     document.fonts.load('16px "VT323"'),
   ]);
-
-  applyHudTheme(theme);
 
   const clock = new Clock(params);
   const want = params.get('source');
@@ -67,6 +68,12 @@ async function main() {
   const source: AgentSource = shared
     ? await SharedSource.connect(params.get('floor') ?? '')
     : t3 ?? new DemoSource(Number(params.get('sim') ?? 1), Number(params.get('agents') ?? 15));
+  if (source instanceof SharedSource && source.appearance) appearance = source.appearance;
+  const theme = styleRoom(THEMES.find((t) => t.id === appearance.theme) ?? THEMES[0], appearance);
+  document.body.dataset.officeTheme = appearance.theme;
+  document.body.dataset.officeLayout = appearance.layout;
+  document.body.dataset.officeLighting = appearance.lighting;
+  applyHudTheme(theme);
   if (shared) TEAMS.forEach((team) => { team.name = ''; });
   const syncTeams = () => {
     if (source instanceof SharedSource) {

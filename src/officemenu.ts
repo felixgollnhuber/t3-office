@@ -1,3 +1,4 @@
+import { isAppearance } from './appearance';
 /** Optional friends/characters drawer layered over the original office. No account is required to use your own office. */
 import { api, type Session, WORK_AREAS, type WorkArea } from './building-api';
 import { B } from './i18n/building';
@@ -29,6 +30,11 @@ export function installOfficeMenu(source: AgentSource, shared: boolean) {
   const floating = button.cloneNode(true) as HTMLButtonElement;
   floating.className = 'office-friends-launcher';
   document.body.append(floating);
+  if (shared) {
+    const home = document.createElement('button'); home.className = 'office-home-launcher'; home.textContent = `← ${B.own}`;
+    home.addEventListener('click', () => { const own = new URL(location.href); own.searchParams.delete('source'); own.searchParams.delete('floor'); location.assign(own); });
+    document.body.append(home);
+  }
   const dialog = document.createElement('dialog');
   dialog.className = 'office-friends-dialog';
   dialog.setAttribute('aria-label', B.friendsMenu);
@@ -82,7 +88,8 @@ export function installOfficeMenu(source: AgentSource, shared: boolean) {
           sentProfiles.set(a.id, value);
         }
       }
-      send({ type: 'office-sharing-state', sharing: true });
+      if (generation !== publisherGeneration) return;
+      send({ type: 'office-sharing-state', sharing: true, updatedAt: Date.now() });
     } catch (error) {
       if (generation !== publisherGeneration) return;
       clearInterval(publishing); publishing = undefined;
@@ -95,8 +102,15 @@ export function installOfficeMenu(source: AgentSource, shared: boolean) {
     const data = event.data;
     if (!data || typeof data !== 'object') return;
     if (data.type === 'office-menu-ready' || data.type === 'office-characters-request') {
+      let appearance; try { appearance = JSON.parse(localStorage.getItem('office.appearance.v1') ?? 'null'); } catch { /* defaults */ }
+      send({ type: 'office-appearance-state', appearance: { theme: settings.get('theme'), layout: isAppearance(appearance) ? appearance.layout : 'original', lighting: isAppearance(appearance) ? appearance.lighting : 'original' } });
+      send({ type: 'office-current-floor', id: shared ? new URLSearchParams(location.search).get('floor') : null });
       apply(); send({ type: 'office-local-characters', characters: shared ? [] : localCharacters(), local: !shared });
       send({ type: 'office-sharing-state', sharing: !!publishing, pending });
+    } else if (data.type === 'office-appearance-save' && !shared && isAppearance(data.appearance)) {
+      localStorage.setItem('office.appearance.v1', JSON.stringify(data.appearance));
+      if (settings.get('theme') !== data.appearance.theme) { settings.set('theme', data.appearance.theme); return; }
+      const next = new URL(location.href); next.searchParams.delete('theme'); location.assign(next);
     } else if (data.type === 'office-character-save' && !shared) {
       const t = source.threads().find((t) => t.id === data.id);
       if (!t || typeof data.name !== 'string' || !data.name.trim() || data.name.length > 32 || !WORK_AREAS.includes(data.area)) return;
@@ -120,7 +134,8 @@ export function installOfficeMenu(source: AgentSource, shared: boolean) {
           const session = await api<Session>('/session');
           if (generation !== publisherGeneration) return;
           ownerId = session.user.id; sentProfiles.clear();
-          await api('/office', 'POST', { paused: false });
+          let storedAppearance; try { storedAppearance = JSON.parse(localStorage.getItem('office.appearance.v1') ?? 'null'); } catch { /* defaults */ }
+          await api('/office', 'POST', { paused: false, appearance: { theme: settings.get('theme'), layout: isAppearance(storedAppearance) ? storedAppearance.layout : 'original', lighting: isAppearance(storedAppearance) ? storedAppearance.lighting : 'original' } });
           if (generation !== publisherGeneration) return;
           clearInterval(publishing);
           publishing = setInterval(() => { void publish(); }, 10_000);
@@ -137,6 +152,6 @@ export function installOfficeMenu(source: AgentSource, shared: boolean) {
       }).catch((error) => send({ type: 'office-menu-error', message: error.message }));
     }
   });
-  window.addEventListener('pagehide', () => { clearInterval(profileTimer); clearInterval(publishing); });
+  window.addEventListener('pagehide', () => { publisherGeneration++; clearInterval(profileTimer); clearInterval(publishing); publishing = undefined; pending = false; });
   if (invite) dialog.showModal();
 }

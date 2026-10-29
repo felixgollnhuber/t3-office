@@ -1,3 +1,4 @@
+import { DEFAULT_APPEARANCE, isAppearance } from '../src/appearance.ts';
 /** Consent-based building API. It stores only accounts, grants and explicitly published status snapshots, never local T3 data. */
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
@@ -69,12 +70,17 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
     CREATE TABLE IF NOT EXISTS characters(office TEXT NOT NULL REFERENCES offices(id), agent TEXT NOT NULL, name TEXT NOT NULL, area TEXT NOT NULL, PRIMARY KEY(office,agent));
     CREATE INDEX IF NOT EXISTS grants_user ON grants(user);
     CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires);
+    CREATE TABLE IF NOT EXISTS appearance(office TEXT PRIMARY KEY REFERENCES offices(id), value TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS invites_office ON invites(office);
   `);
   const one = (sql: string, ...values: (string | number)[]) => db.prepare(sql).get(...values) as Row | undefined;
   const all = (sql: string, ...values: (string | number)[]) => db.prepare(sql).all(...values) as Row[];
   const run = (sql: string, ...values: (string | number)[]) => db.prepare(sql).run(...values);
   const ownOffice = (user: User) => one('SELECT * FROM offices WHERE owner=?', user.id)!;
+  const appearance = (office: Row) => {
+    const row = one('SELECT value FROM appearance WHERE office=?', String(office.id));
+    return row ? JSON.parse(String(row.value)) : DEFAULT_APPEARANCE;
+  };
   const characters = (office: Row) => {
     const profiles = new Map(all('SELECT agent,name,area FROM characters WHERE office=?', String(office.id)).map((p) => [p.agent, p]));
     return (JSON.parse(String(office.agents)) as Agent[]).map((a) => {
@@ -84,7 +90,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
   };
   const session = (user: User) => {
     const office = ownOffice(user);
-    return { user, office: { id: office.id, name: office.name, paused: !!office.paused } };
+    return { user, office: { id: office.id, name: office.name, paused: !!office.paused, appearance: appearance(office) } };
   };
   const authenticate = (req: IncomingMessage): User => {
     const raw = req.headers.cookie?.split(';').map((p) => p.trim()).find((p) => p.startsWith('building_session='))?.slice('building_session='.length);
@@ -120,6 +126,8 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
       id: office.id, name: office.name,
       ownerName: one('SELECT name FROM users WHERE id=?', String(office.owner))!.name,
       isOwner, scope: isOwner ? 'owner' : level, online,
+      ...(isOwner ? { paused: !!office.paused } : {}),
+      ...(isOwner || level === 'activity' ? { appearance: appearance(office) } : {}),
       updatedAt: office.updated, agentCount: isOwner || (level === 'activity' && online) ? agents.length : 0,
       areas: [...counts].map(([area, count]) => ({ area, count })),
     };
@@ -218,12 +226,14 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
       if (match('/office', ['POST'])) {
         const input = await authorizedBody();
         const current = ownOffice(user);
-        if (input.name === undefined && input.paused === undefined) fail(400, 'Choose an office name or sharing status.');
+        if (input.name === undefined && input.paused === undefined && input.appearance === undefined) fail(400, 'Choose an office name or sharing status.');
+        if (input.appearance !== undefined && !isAppearance(input.appearance)) fail(400, 'Invalid office appearance.');
         const name = input.name === undefined ? String(current.name) : text(input.name, 'office name', 80);
         if (input.paused !== undefined && typeof input.paused !== 'boolean') fail(400, 'Invalid sharing status.');
         const paused = input.paused === undefined ? Number(current.paused) : Number(input.paused);
         // Pausing removes the snapshot; resuming cannot accidentally republish old activity.
         run('UPDATE offices SET name=?,paused=?,agents=CASE WHEN ?=1 THEN \'[]\' ELSE agents END,updated=CASE WHEN ?=1 THEN NULL ELSE updated END WHERE id=?', name, paused, paused, paused, String(office.id));
+        if (input.appearance !== undefined) run('INSERT INTO appearance VALUES(?,?) ON CONFLICT(office) DO UPDATE SET value=excluded.value', String(office.id), JSON.stringify({ theme: input.appearance.theme, layout: input.appearance.layout, lighting: input.appearance.lighting }));
         return reply(200, session(user));
       }
       if (match('/publish', ['POST'])) {

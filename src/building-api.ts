@@ -1,9 +1,10 @@
+import type { Appearance } from './appearance';
 /** Minimal sharing contract. Deliberately excludes tasks, transcripts, paths, costs and tool output. */
 import type { Provider, Status } from './data';
 
 export interface Session {
   user: { id: string; handle: string; name: string };
-  office: { id: string; name: string; paused: boolean };
+  office: { id: string; name: string; paused: boolean; appearance: Appearance };
 }
 export interface Floor {
   id: string;
@@ -12,6 +13,8 @@ export interface Floor {
   isOwner: boolean;
   scope: 'owner' | 'presence' | 'activity';
   online: boolean;
+  paused?: boolean;
+  appearance?: Appearance;
   updatedAt: number | null;
   agentCount: number;
   areas: { area: WorkArea; count: number }[];

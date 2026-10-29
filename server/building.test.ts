@@ -268,3 +268,29 @@ test('slow request bodies cannot undo a pause or reuse revoked credentials', asy
     assert.equal((await editing.end('"Should not apply"}')).status, 401);
   } finally { await f.close(); }
 });
+
+test('owner room style persists; only authorized activity guests receive it', async () => {
+  const f = await fixture();
+  try {
+    const owner = await f.register('decorator'); const guest = await f.register('visitor'); const stranger = await f.register('stranger');
+    const appearance = { theme: 'loft', layout: 'lounge', lighting: 'warm' };
+    assert.equal((await f.request('/office', 'POST', { appearance: { ...appearance, theme: 'unknown' } }, owner.client)).status, 400);
+    assert.equal((await f.request('/office', 'POST', { appearance }, owner.client)).status, 200);
+    await f.restart();
+    assert.deepEqual((await f.request('/session', 'GET', undefined, owner.client)).data.office.appearance, appearance);
+    assert.equal((await f.request(`/offices/${owner.office.id}`, 'GET', undefined, stranger.client)).status, 404);
+    for (const scope of ['presence', 'activity']) {
+      const invite = await f.request('/invites', 'POST', { scope }, owner.client);
+      await f.request('/accept', 'POST', { token: invite.data.token }, guest.client);
+      const snapshot = await f.request(`/offices/${owner.office.id}`, 'GET', undefined, guest.client);
+      assert.equal(snapshot.status, 200);
+      assert.deepEqual(snapshot.data.office.appearance, scope === 'activity' ? appearance : undefined);
+    }
+    // Updating a visitor's own style never changes the host's style.
+    await f.request('/office', 'POST', { appearance: { theme: 'campus', layout: 'focus', lighting: 'cool' } }, guest.client);
+    assert.deepEqual((await f.request(`/offices/${owner.office.id}`, 'GET', undefined, guest.client)).data.office.appearance, appearance);
+    const grants = await f.request('/grants', 'GET', undefined, owner.client);
+    assert.equal((await f.request(`/grants/${grants.data.grants[0].id}`, 'DELETE', {}, owner.client)).status, 200);
+    assert.equal((await f.request(`/offices/${owner.office.id}`, 'GET', undefined, guest.client)).status, 404);
+  } finally { await f.close(); }
+});

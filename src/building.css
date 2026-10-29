@@ -43,3 +43,12 @@ section { margin-top: 24px; }
 .floor-windows i.lit { background: #c8ac67; }
 #invite-result button, #key-result button { margin-top: 10px; }
 @media(max-width: 480px) { #friends-menu { padding: 18px; } input, select, textarea { font-size: 16px; } .menu-tabs { gap: 8px; } .menu-tabs button { font-size: 12px; padding: 7px 9px; } }
+.elevator-heading { display: flex; gap: 18px; align-items: center; margin-top: 24px; }
+.elevator-heading > span { font-size: 50px; border: 3px solid var(--edge); padding: 0 14px; }
+.elevator-heading h2 { margin-bottom: 0; }
+.elevator-heading .hint { margin-bottom: 0; }
+.floor.current-floor { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.floor .floor-number { letter-spacing: 1px; margin-bottom: 10px; }
+.sharing-summary { border: 2px solid var(--edge); padding: 16px; }
+.sharing-summary > p { line-height: 1.6; margin-bottom: 10px; }
+.sharing-summary > h2:not(:first-child) { margin-top: 24px; }

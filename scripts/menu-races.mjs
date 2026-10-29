@@ -56,6 +56,42 @@ try {
     assert.equal(state.office.paused, true, `Stop must supersede delayed ${endpoint} start`);
     await page.close();
   }
+  // Saving a room while signing out must not restore the account or navigate after logout.
+  const stylePage = await context.newPage(); await stylePage.goto(`${base}?harness=1`);
+  await stylePage.locator('#hud').getByRole('button', { name: 'Friends & characters', exact: true }).click();
+  const styleMenu = stylePage.frameLocator('.office-friends-dialog iframe'); await styleMenu.locator('#invite-form').waitFor();
+  await styleMenu.locator('#invite-form button[type="submit"]').click();
+  const inviteLink = new URL(await styleMenu.locator('#invite-result textarea').inputValue());
+  assert.equal(inviteLink.searchParams.has('theme'), false, 'Invite URLs must not disclose the owner theme to presence guests');
+  await styleMenu.getByRole('button', { name: 'Office style', exact: true }).click();
+  let releaseStyle, styleCaptured;
+  const styleGate = new Promise((r) => { releaseStyle = r; }); const styleReady = new Promise((r) => { styleCaptured = r; });
+  await stylePage.route('**/api/building/office', async (route) => { const response = await route.fetch(); styleCaptured(); await styleGate; await route.fulfill({ response }); });
+  await styleMenu.locator('#style-form button[type="submit"]').click(); await styleReady;
+  await styleMenu.getByRole('button', { name: 'Friends', exact: true }).click();
+  await styleMenu.getByRole('button', { name: 'Sign out', exact: true }).click(); await styleMenu.locator('#auth-form').waitFor();
+  releaseStyle(); await stylePage.unrouteAll({ behavior: 'wait' });
+  await styleMenu.getByRole('button', { name: 'Sharing', exact: true }).click(); await styleMenu.locator('#auth-form').waitFor();
+  assert.equal(new URL(stylePage.url()).searchParams.get('harness'), '1');
+  assert.equal(await stylePage.evaluate(() => localStorage.getItem('office.appearance.v1')), null);
+  await stylePage.close(); await request(context, '/login', { handle: 'alice', password });
+  const leaving = await context.newPage(); await leaving.goto(`${base}?harness=1`);
+  await leaving.locator('#hud').getByRole('button', { name: 'Friends & characters', exact: true }).click();
+  const leavingMenu = leaving.frameLocator('.office-friends-dialog iframe'); await leavingMenu.locator('#invite-form').waitFor();
+  await leavingMenu.getByRole('button', { name: 'Sharing', exact: true }).click();
+  let releaseLeaving, leavingCaptured, publishedAfterLeaving = 0;
+  const leavingGate = new Promise((r) => { releaseLeaving = r; }); const leavingReady = new Promise((r) => { leavingCaptured = r; });
+  leaving.on('request', (r) => { if (r.url().endsWith('/api/building/publish')) publishedAfterLeaving++; });
+  await leaving.route('**/api/building/office', async (route) => {
+    if (route.request().frame() !== leaving.mainFrame()) return route.continue();
+    const response = await route.fetch(); leavingCaptured(); await leavingGate; await route.fulfill({ response });
+  });
+  await leavingMenu.getByRole('button', { name: 'Share this office with my invited friends', exact: true }).click(); await leavingReady;
+  await leaving.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')));
+  releaseLeaving(); await leaving.unrouteAll({ behavior: 'wait' });
+  await leaving.evaluate(() => new Promise(requestAnimationFrame));
+  assert.equal(publishedAfterLeaving, 0, 'Leaving or reloading during a pending start must not publish');
+  await leaving.close();
   const state = await (await context.request.get(`${base}api/building/session`)).json();
   await request(context, '/office', { paused: false });
   await request(context, '/publish', { agents: [{ id: 'synthetic-agent', provider: 'codex', status: 'running' }] });
@@ -71,5 +107,5 @@ try {
   await network.unrouteAll({ behavior: 'ignoreErrors' });
   await network.waitForFunction(() => window.__testsource?.threads().length === 1 && !document.querySelector('.shared-connection-cover'), { timeout: 20_000 });
   await network.close();
-  console.log('PASS: stale accounts/pending sharing cannot survive logout; stop supersedes delayed unpause; stalled snapshots are covered and recover without a renderer.');
+  console.log('PASS: stale accounts/style saves cannot survive logout; pagehide cancels pending publication; stop supersedes delayed unpause; stalled snapshots are covered and recover without a renderer.');
 } finally { await browser?.close(); await server.close(); await rm(dir, { recursive: true, force: true }); }

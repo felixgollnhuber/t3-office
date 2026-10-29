@@ -14,8 +14,8 @@ const errors = []; const privateRequests = [];
 try {
   await server.listen(); const base = server.resolvedUrls.local[0];
   browser = await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-webgl'] });
-  const ownerContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-  const guestContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const ownerContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const guestContext = await browser.newContext({ viewport: { width: 1100, height: 760 } });
   const owner = await ownerContext.newPage(); const guest = await guestContext.newPage();
   for (const page of [owner, guest]) {
     page.on('pageerror', (e) => errors.push(e.message));
@@ -37,7 +37,7 @@ try {
   assert.equal(await owner.locator('#hud .receipt').isVisible(), true);
   assert.equal(await owner.locator('#hud .deck').isVisible(), true);
   await mkdir('shots', { recursive: true });
-  await owner.screenshot({ path: 'shots/office-first.png', fullPage: true });
+  await owner.screenshot({ path: 'shots/office-first.png', fullPage: true, timeout: 60000 });
   const firstLocal = await owner.evaluate(() => window.__source.threads()[0].id);
   await openMenu(owner);
   await menu(owner).getByRole('button', { name: 'Your characters', exact: true }).click();
@@ -54,10 +54,22 @@ try {
   await menu(owner).getByRole('button', { name: 'Close', exact: true }).click();
   await owner.reload();
   await owner.waitForFunction((id) => window.__source?.threads().find((t) => t.id === id)?.name === 'Cody', firstLocal);
+  await openMenu(owner);
+  await menu(owner).getByRole('button', { name: 'Office style', exact: true }).click();
+  await menu(owner).locator('#style-form select[name="theme"]').selectOption('loft');
+  await menu(owner).locator('#style-form select[name="layout"]').selectOption('lounge');
+  await menu(owner).locator('#style-form select[name="lighting"]').selectOption('warm');
+  await menu(owner).getByRole('button', { name: 'Apply style & reopen office', exact: true }).click();
+  await owner.waitForFunction(() => document.body.dataset.officeTheme === 'loft' && document.body.dataset.officeLayout === 'lounge' && document.body.dataset.officeLighting === 'warm');
+  await owner.reload();
+  await owner.waitForFunction(() => document.body.dataset.officeLayout === 'lounge');
+  assert.ok(await owner.evaluate(() => window.__office.spots.couch.length >= 2 && window.__office.spots.pingpong.length === 2));
+  console.log('PASS: local theme, lighting and lounge furniture survive reload.');
   await openMenu(owner); await register(owner, 'alice', 'Alice');
   await menu(owner).getByRole('button', { name: 'Sharing', exact: true }).click();
   await menu(owner).getByRole('button', { name: 'Share this office with my invited friends', exact: true }).click();
   await menu(owner).getByRole('button', { name: 'Stop sharing', exact: true }).waitFor();
+  await menu(owner).locator('#snapshot-state').getByText('Last activity received', { exact: false }).waitFor();
   await menu(owner).getByRole('button', { name: 'Friends', exact: true }).click();
   await menu(owner).locator('#invite-form select').selectOption('activity');
   await menu(owner).locator('#invite-form button[type="submit"]').click();
@@ -68,13 +80,29 @@ try {
   await register(guest, 'bobby', 'Bobby');
   await menu(guest).locator('#accept-form button[type="submit"]').click();
   await guest.waitForURL(/source=shared/);
+  console.log('PASS: invitation accepted and shared floor opened.');
   await guest.waitForFunction(() => window.__source?.threads().some((t) => t.name === 'Cody' && t.workArea === 'Frontend'));
+  assert.equal(await guest.locator('body').getAttribute('data-office-layout'), 'lounge');
+  assert.equal(await guest.locator('body').getAttribute('data-office-theme'), 'loft');
   const publicId = await guest.evaluate(() => window.__source.threads().find((t) => t.name === 'Cody').id);
   assert.notEqual(publicId, firstLocal);
   await openMenu(guest);
   await menu(guest).locator('#floor-list').getByText('Frontend (1)', { exact: false }).waitFor();
+  assert.equal(await menu(guest).locator('#floor-list [aria-current="location"]').count(), 1);
+  await menu(guest).getByRole('button', { name: 'Office style', exact: true }).click();
+  await menu(guest).getByText('You are visiting a friend.', { exact: false }).waitFor();
   await menu(guest).getByRole('button', { name: 'Close', exact: true }).click();
-  await guest.screenshot({ path: 'shots/friends-office.png', fullPage: true });
+  await guest.screenshot({ path: 'shots/friends-office.png', fullPage: true, timeout: 60000 });
+  await guest.getByRole('button', { name: '← Your floor', exact: true }).click();
+  await guest.waitForURL((url) => !url.searchParams.has('floor'));
+  await guest.waitForFunction(() => document.body.dataset.officeLayout === 'original');
+  await openMenu(guest);
+  await menu(guest).locator('#floor-list .floor[data-own="false"]').click();
+  await guest.waitForURL(/source=shared/);
+  await guest.waitForFunction(() => document.body.dataset.officeLayout === 'lounge');
+  await menu(owner).getByRole('button', { name: 'Sharing', exact: true }).click();
+  await menu(owner).locator('#sharing-audience').getByText('Bobby · @bobby', { exact: false }).waitFor();
+  await menu(owner).locator('#sharing-audience').getByText('Activity guests:', { exact: false }).waitFor();
   // Closing the publisher page stops its heartbeat; direct synthetic API requests test subsequent renderer reconciliation.
   await owner.close();
   assert.equal((await call('/publish', 'POST', { agents: [{ id: publicId, provider: 'codex', status: 'waiting' }] })).status(), 200);
@@ -114,9 +142,16 @@ try {
   await openMenu(mobile); await menu(mobile).getByRole('button', { name: 'Your characters', exact: true }).click();
   await menu(mobile).locator('.character-form').first().waitFor();
   assert.equal(await menu(mobile).locator('html').evaluate((el) => el.scrollWidth <= innerWidth), true);
-  await mobile.screenshot({ path: 'shots/office-menu-mobile.png', fullPage: true });
+  await mobile.screenshot({ path: 'shots/office-menu-mobile.png', fullPage: true, timeout: 60000 });
+  await menu(mobile).getByRole('button', { name: 'Office style', exact: true }).click();
+  assert.equal(await menu(mobile).locator('html').evaluate((el) => el.scrollWidth <= innerWidth), true);
+  await menu(mobile).locator('#style-form select[name="layout"]').selectOption('focus');
+  await menu(mobile).locator('#style-form select[name="lighting"]').selectOption('cool');
+  await menu(mobile).locator('#style-form button[type="submit"]').click();
+  await mobile.waitForFunction(() => window.__office && document.body.dataset.officeLayout === 'focus' && document.body.dataset.officeLighting === 'cool' && window.__office.spots.couch.length === 0 && !window.__office.spots.pingpong?.length);
+
   await mobile.goto(`${base}?source=demo&weather=clear&lang=de`);
   await mobile.getByRole('button', { name: 'Freunde & Charaktere', exact: true }).waitFor();
   assert.deepEqual(privateRequests, []); assert.deepEqual(errors, []);
-  console.log('PASS: original office/HUD first, optional account, persistent local names/areas, scoped live sharing/invites, renderer updates, pause/revoke, logout race, mobile and German menu.');
+  console.log('PASS: elevator/current-floor/home, scoped sharing audience and guest room style; original office/HUD first, optional account, persistent local names/areas, scoped live sharing/invites, renderer updates, pause/revoke, logout race, mobile and German menu.');
 } finally { await browser?.close(); await server.close(); await rm(dir, { recursive: true, force: true }); }
