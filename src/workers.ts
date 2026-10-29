@@ -1,3 +1,4 @@
+import { isCharacterStyle } from './character-style';
 import * as THREE from 'three';
 import { createCharacter, type Character, type Look, type Pose, type HairStyle, type Outfit } from './character';
 import { Boss } from './boss';
@@ -99,6 +100,9 @@ export interface Anchor {
 
 export class Worker {
   ch: Character;
+  readonly baseLook: Look;
+  private styleKey = '';
+  get look(): Look { return { ...this.baseLook, ...(isCharacterStyle(this.thread.characterStyle) ? this.thread.characterStyle : {}) }; }
   desk?: Desk;
   x = 0;
   z = 0;
@@ -136,7 +140,9 @@ export class Worker {
   lastFive = -999;
 
   constructor(public thread: Thread, private world: World) {
-    this.ch = createCharacter(lookFor(thread), (thread.parentId ? 0.78 : 1) * PERSON);
+    this.baseLook = lookFor(thread);
+    this.styleKey = JSON.stringify(thread.characterStyle);
+    this.ch = createCharacter(this.look, (thread.parentId ? 0.78 : 1) * PERSON);
     world.scene.add(this.ch.root);
   }
 
@@ -371,6 +377,17 @@ export class Worker {
   }
 
   update(dt: number) {
+    const styleKey = JSON.stringify(this.thread.characterStyle);
+    if (styleKey !== this.styleKey) {
+      this.styleKey = styleKey;
+      const old = this.ch;
+      this.ch = createCharacter(this.look, (this.thread.parentId ? 0.78 : 1) * PERSON);
+      this.ch.root.position.copy(old.root.position); this.ch.root.quaternion.copy(old.root.quaternion);
+      this.ch.root.scale.copy(old.root.scale); this.ch.backpack.visible = old.backpack.visible;
+      old.root.removeFromParent(); this.world.scene.add(this.ch.root);
+      // Toon materials are shared/cached; only retire this character's geometry.
+      old.root.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
+    }
     const w = this.world;
     this.modeT += dt;
     this.statusT += dt;

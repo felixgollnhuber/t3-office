@@ -1,3 +1,4 @@
+import { isCharacterStyle, cleanCharacterStyle } from '../src/character-style.ts';
 import { DEFAULT_APPEARANCE, isAppearance } from '../src/appearance.ts';
 /** Consent-based building API. It stores only accounts, grants and explicitly published status snapshots, never local T3 data. */
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
@@ -70,6 +71,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
     CREATE TABLE IF NOT EXISTS characters(office TEXT NOT NULL REFERENCES offices(id), agent TEXT NOT NULL, name TEXT NOT NULL, area TEXT NOT NULL, PRIMARY KEY(office,agent));
     CREATE INDEX IF NOT EXISTS grants_user ON grants(user);
     CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires);
+    CREATE TABLE IF NOT EXISTS character_styles(office TEXT NOT NULL REFERENCES offices(id), agent TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(office,agent));
     CREATE TABLE IF NOT EXISTS appearance(office TEXT PRIMARY KEY REFERENCES offices(id), value TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS invites_office ON invites(office);
   `);
@@ -83,9 +85,10 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
   };
   const characters = (office: Row) => {
     const profiles = new Map(all('SELECT agent,name,area FROM characters WHERE office=?', String(office.id)).map((p) => [p.agent, p]));
+    const styles = new Map(all('SELECT agent,value FROM character_styles WHERE office=?', String(office.id)).map((p) => [p.agent, JSON.parse(String(p.value))]));
     return (JSON.parse(String(office.agents)) as Agent[]).map((a) => {
       const profile = profiles.get(a.id);
-      return { ...a, name: profile ? String(profile.name) : a.name, area: profile ? String(profile.area) : 'general' };
+      return { ...a, name: profile ? String(profile.name) : a.name, area: profile ? String(profile.area) : 'general', ...(styles.has(a.id) ? { style: styles.get(a.id) } : {}) };
     });
   };
   const session = (user: User) => {
@@ -262,11 +265,13 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
         const id = characterMatch[1];
         const exists = characters(current).some((a) => a.id === id) || one('SELECT agent FROM characters WHERE office=? AND agent=?', String(current.id), id);
         if (!exists) fail(404, 'Character not found in your office.');
+        if (input.style !== undefined && !isCharacterStyle(input.style)) fail(400, 'Choose a valid character style.');
         const name = text(input.name, 'character name', 32);
         if (/[\u0000-\u001f\u007f]/.test(name)) fail(400, 'Use a visible character name.');
         if (typeof input.area !== 'string' || !areas.has(input.area)) fail(400, 'Choose a valid work area.');
         if (!one('SELECT agent FROM characters WHERE office=? AND agent=?', String(current.id), id) && Number(one('SELECT COUNT(*) AS count FROM characters WHERE office=?', String(current.id))!.count) >= 256) fail(409, 'This office has reached its character profile limit.');
         run('INSERT INTO characters VALUES(?,?,?,?) ON CONFLICT(office,agent) DO UPDATE SET name=excluded.name,area=excluded.area', String(current.id), id, name, input.area);
+        if (input.style !== undefined) run('INSERT INTO character_styles VALUES(?,?,?) ON CONFLICT(office,agent) DO UPDATE SET value=excluded.value', String(current.id), id, JSON.stringify(cleanCharacterStyle(input.style)));
         return reply(200, { ok: true });
       }
       const officeMatch = route.match(/^\/offices\/([\w-]+)$/);

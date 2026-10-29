@@ -1,3 +1,4 @@
+import { CharacterEditor } from './character-editor';
 import { DEFAULT_APPEARANCE, isAppearance } from './appearance';
 import { styleRoom } from './roomstyle';
 import * as THREE from 'three';
@@ -102,7 +103,7 @@ async function main() {
   const player = new Player(sfx, () => hud!.ytHost());
   const world = new World(office, theme, source, cycle, sfx, player, weather);
   hud = new Hud(theme, sfx, clock, source, player, weather, () => menu.open());
-  installOfficeMenu(source, shared);
+  installOfficeMenu(source, shared, (id) => focusAgent(id));
   const wall = new QuotaWall(office, usage, () => focusOn(spots[0]));
   if (t3) wall.live = 'live · T3';
   const board = new BoardSource(t3 ? 'live' : 'demo');
@@ -157,7 +158,7 @@ async function main() {
     if (id === 'boss') return hud!.toast(TXT.bossBusy);
     if (world.workers.has(id) || isBoss(id)) focusAgent(id);
   };
-  const inspector = new AgentInspector(source, world, () => clock.now());
+  const inspector = new AgentInspector(source, world, () => clock.now(), shared ? undefined : new CharacterEditor(source, world));
   const tagMode = () => (settings.get('tags') === 'auto' ? (theme.tagMode ?? 'full') : (settings.get('tags') as 'full' | 'quiet'));
   const tags = new Tags(tagMode(), (id) => {
     noteClick({ kind: 'agent', id, name: '' });
@@ -249,7 +250,8 @@ async function main() {
       // someone walking keeps the furniture around them; only a seated close-up cuts through the room
       let clip = 12;
       shot.set(p.x, 0.95, p.z);
-      if (w && w.mode === 'seated' && w.desk) {
+      if (w && inspector.customizing) { az = THREE.MathUtils.radToDeg(w.ch.root.rotation.y); el = 22; half = 1.7; clip = 5; }
+      else if (w && w.mode === 'seated' && w.desk) {
         // over the shoulder, so the monitor is readable
         const { p: sp, n } = w.desk.screenPose();
         az = THREE.MathUtils.radToDeg(Math.atan2(n.x, n.z)) + 42;
@@ -308,6 +310,7 @@ async function main() {
     },
   };
   const focusAgent = (id: string) => {
+    inspector.selectCharacter(id);
     if (fly.spot === agentSpot) {
       previewDesk?.preview(null);
       previewDesk = null;
@@ -609,6 +612,7 @@ async function main() {
   });
   window.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape') return closeFocus();
+    if ((ev.target as HTMLElement).closest('input, select, textarea, [contenteditable=true]')) return;
     if (ev.key === 'p') return fly.spot ? closeFocus() : focusOn(spots[1]);
     if (ev.key === 'k') return fly.spot ? closeFocus() : focusOn(spots[0]);
     if (ev.key === '[') clock.shift(-30);

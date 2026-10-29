@@ -73,6 +73,7 @@ function render() {
 }
 function renderCharacters(agents: SharedAgent[]) {
   if (tab !== 'characters') return;
+  if (local) { root.querySelector('#character-list')!.innerHTML = `<p class="hint">${B.selectCharacter}</p>` + agents.map((a) => `<button class="character-select" data-character-select="${esc(a.id)}">${esc(a.name)} · ${B.editCharacter}</button>`).join(''); return; }
   root.querySelector('#character-list')!.innerHTML = agents.map((a) => `<form class="character-form" data-character="${esc(a.id)}"><span class="character-avatar" aria-hidden="true">${esc(a.name.slice(0, 2).toUpperCase())}</span><div><small>${esc(a.provider)}</small><label>${B.characterName}<input name="name" required maxlength="32" value="${esc(a.name)}"></label><label>${B.workArea}<select name="area">${WORK_AREAS.map((area) => `<option value="${area}" ${a.area === area ? 'selected' : ''}>${B.areaLabels[area]}</option>`).join('')}</select></label></div><button type="submit">${B.saveCharacter}</button></form>`).join('') || `<p>${B.noCharacters}</p>`;
 }
 function renderSharingState() {
@@ -150,6 +151,7 @@ root.addEventListener('submit', (event) => {
 root.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!button) return;
   void run(async () => {
+    if (button.dataset.characterSelect) { send({ type: 'office-character-select', id: button.dataset.characterSelect }); return; }
     if (button.dataset.tab) { tab = button.dataset.tab as typeof tab; render(); return; }
     if (button.dataset.floor) {
       const data = { type: button.dataset.own === 'true' ? 'office-own-floor' : 'office-visit-floor', id: button.dataset.floor };

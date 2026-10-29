@@ -52,3 +52,4 @@ section { margin-top: 24px; }
 .sharing-summary { border: 2px solid var(--edge); padding: 16px; }
 .sharing-summary > p { line-height: 1.6; margin-bottom: 10px; }
 .sharing-summary > h2:not(:first-child) { margin-top: 24px; }
+.character-select { width: 100%; text-align: left; margin-bottom: 12px; }

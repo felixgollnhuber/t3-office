@@ -39,21 +39,28 @@ try {
   await mkdir('shots', { recursive: true });
   await owner.screenshot({ path: 'shots/office-first.png', fullPage: true, timeout: 60000 });
   const firstLocal = await owner.evaluate(() => window.__source.threads()[0].id);
-  await openMenu(owner);
-  await menu(owner).getByRole('button', { name: 'Your characters', exact: true }).click();
-  await menu(owner).locator('.character-form').first().waitFor();
-  await menu(owner).locator('.character-form').first().locator('input[name="name"]').fill('Cody');
-  await menu(owner).locator('.character-form').first().locator('select[name="area"]').selectOption('frontend');
-  await menu(owner).locator('.character-form').first().getByRole('button', { name: 'Save character', exact: true }).click();
-  try { await owner.waitForFunction((id) => window.__source?.threads().find((t) => t.id === id)?.name === 'Cody', firstLocal, { timeout: 10_000 }); }
-  catch (error) {
-    console.log('Synthetic rename diagnostics:', await owner.evaluate(() => ({ profiles: localStorage.getItem('office.character-profiles.v1'), agents: window.__source?.threads().map((t) => ({ id: t.id, name: t.name })) })));
-    console.log('Form diagnostics:', await menu(owner).locator('.character-form').first().evaluate((f) => ({ id: f.dataset.character, name: f.querySelector('input').value, area: f.querySelector('select').value })));
-    throw error;
-  }
-  await menu(owner).getByRole('button', { name: 'Close', exact: true }).click();
-  await owner.reload();
+  await owner.locator(`#tags .tag[data-id="${firstLocal}"]`).dispatchEvent('click');
+  const editor = owner.locator('.character-editor'); await editor.waitFor();
+  const originalLook = await owner.evaluate((id) => JSON.stringify(window.__world.workers.get(id).look), firstLocal);
+  await editor.locator('input[name="name"]').fill('');
+  await editor.locator('input[name="name"]').pressSequentially('poppy');
+  assert.equal(await editor.isVisible(), true, 'Typing shortcut letters must not close the editor');
+  await editor.locator('input[name="name"]').fill('Cody');
+  await editor.locator('select[name="area"]').selectOption('frontend');
+  await owner.waitForTimeout(1200);
+  assert.equal(await editor.locator('input[name="name"]').inputValue(), 'Cody', 'Activity refresh must not erase a draft');
+  await editor.getByRole('button', { name: 'Save character', exact: true }).click();
   await owner.waitForFunction((id) => window.__source?.threads().find((t) => t.id === id)?.name === 'Cody', firstLocal);
+  assert.equal(await owner.evaluate((id) => JSON.stringify(window.__world.workers.get(id).look), firstLocal), originalLook, 'Renaming alone must preserve the original appearance');
+  await editor.locator('select[name="hairStyle"]').selectOption('mohawk');
+  await editor.locator('select[name="outfit"]').selectOption('hoodie');
+  await editor.locator('input[name="shirt"][value="#d35c82"]').check();
+  await editor.locator('input[name="glasses"]').check();
+  await editor.getByRole('button', { name: 'Save character', exact: true }).click();
+  await owner.waitForFunction((id) => window.__world.workers.get(id).look.hairStyle === 'mohawk' && window.__world.workers.get(id).look.shirt === '#d35c82', firstLocal);
+  await owner.locator('.focus-view [data-a="close"]').click();
+  await owner.reload();
+  await owner.waitForFunction((id) => window.__source?.threads().find((t) => t.id === id)?.name === 'Cody' && window.__world.workers.get(id).look.hairStyle === 'mohawk', firstLocal);
   await openMenu(owner);
   await menu(owner).getByRole('button', { name: 'Office style', exact: true }).click();
   await menu(owner).locator('#style-form select[name="theme"]').selectOption('loft');
@@ -86,6 +93,11 @@ try {
   assert.equal(await guest.locator('body').getAttribute('data-office-theme'), 'loft');
   const publicId = await guest.evaluate(() => window.__source.threads().find((t) => t.name === 'Cody').id);
   assert.notEqual(publicId, firstLocal);
+  assert.equal(await guest.evaluate((id) => window.__world.workers.get(id).look.hairStyle, publicId), 'mohawk');
+  await guest.evaluate((id) => window.__focusAgent(id), publicId);
+  await guest.locator('.focus-view.on').waitFor();
+  assert.equal(await guest.locator('.character-editor').count(), 0, 'Visitors must not edit host characters');
+  await guest.locator('.focus-view [data-a="close"]').click();
   await openMenu(guest);
   await menu(guest).locator('#floor-list').getByText('Frontend (1)', { exact: false }).waitFor();
   assert.equal(await menu(guest).locator('#floor-list [aria-current="location"]').count(), 1);
@@ -140,7 +152,12 @@ try {
   await mobile.goto(`${base}?source=demo&weather=clear&agents=8`);
   await mobile.getByRole('button', { name: 'Friends & characters', exact: true }).waitFor();
   await openMenu(mobile); await menu(mobile).getByRole('button', { name: 'Your characters', exact: true }).click();
-  await menu(mobile).locator('.character-form').first().waitFor();
+  await menu(mobile).locator('.character-select').first().waitFor();
+  await menu(mobile).locator('.character-select').first().click();
+  await mobile.locator('.character-editor').waitFor();
+  assert.equal(await mobile.locator('.character-customization').evaluate((el) => el.scrollWidth <= el.clientWidth), true);
+  await mobile.locator('.focus-view [data-a="close"]').click();
+  await openMenu(mobile);
   assert.equal(await menu(mobile).locator('html').evaluate((el) => el.scrollWidth <= innerWidth), true);
   await mobile.screenshot({ path: 'shots/office-menu-mobile.png', fullPage: true, timeout: 60000 });
   await menu(mobile).getByRole('button', { name: 'Office style', exact: true }).click();

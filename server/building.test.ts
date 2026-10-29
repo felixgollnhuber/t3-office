@@ -294,3 +294,33 @@ test('owner room style persists; only authorized activity guests receive it', as
     assert.equal((await f.request(`/offices/${owner.office.id}`, 'GET', undefined, guest.client)).status, 404);
   } finally { await f.close(); }
 });
+
+test('character style is owner-only, durable, validated and visible only with activity consent', async () => {
+  const f = await fixture();
+  try {
+    const owner = await f.register('stylist'); const guest = await f.register('guest');
+    await f.request('/publish', 'POST', { agents: synthetic }, owner.client);
+    const style = { hairStyle: 'mohawk', outfit: 'hoodie', skin: '#b9794f', hair: '#dfbd73', shirt: '#d35c82', glasses: true };
+    const profile = { name: 'Nova', area: 'design', style };
+    assert.equal((await f.request('/characters/opaque-agent', 'POST', profile, guest.client)).status, 404);
+    assert.equal((await f.request('/characters/opaque-agent', 'POST', { ...profile, style: { ...style, hair: 'url(secret)' } }, owner.client)).status, 400);
+    assert.equal((await f.request('/characters/opaque-agent', 'POST', { ...profile, style: { ...style, privatePrompt: 'never-share' } }, owner.client)).status, 200);
+    await f.restart();
+    assert.deepEqual((await f.request('/characters', 'GET', undefined, owner.client)).data.characters[0].style, style);
+    for (const scope of ['presence', 'activity']) {
+      const invite = await f.request('/invites', 'POST', { scope }, owner.client);
+      await f.request('/accept', 'POST', { token: invite.data.token }, guest.client);
+      const snapshot = await f.request(`/offices/${owner.office.id}`, 'GET', undefined, guest.client);
+      if (scope === 'presence') assert.deepEqual(snapshot.data.agents, []);
+      else assert.deepEqual(snapshot.data.agents[0].style, style);
+      assert.equal(JSON.stringify(snapshot.data).includes('never-share'), false);
+    }
+    // Legacy rename requests retain the saved look; publishers cannot overwrite it.
+    await f.request('/characters/opaque-agent', 'POST', { name: 'Nova 2', area: 'backend' }, owner.client);
+    await f.request('/publish', 'POST', { agents: synthetic }, owner.client);
+    assert.deepEqual((await f.request('/characters', 'GET', undefined, owner.client)).data.characters[0].style, style);
+    const grants = await f.request('/grants', 'GET', undefined, owner.client);
+    await f.request(`/grants/${grants.data.grants[0].id}`, 'DELETE', {}, owner.client);
+    assert.equal((await f.request(`/offices/${owner.office.id}`, 'GET', undefined, guest.client)).status, 404);
+  } finally { await f.close(); }
+});

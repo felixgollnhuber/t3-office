@@ -1,3 +1,5 @@
+import { readProfiles, saveProfile } from './character-profiles';
+import { isCharacterStyle, cleanCharacterStyle } from './character-style';
 import { isAppearance } from './appearance';
 /** Optional friends/characters drawer layered over the original office. No account is required to use your own office. */
 import { api, type Session, WORK_AREAS, type WorkArea } from './building-api';
@@ -5,12 +7,8 @@ import { B } from './i18n/building';
 import type { AgentSource } from './source';
 import { settings } from './settings';
 
-type Profile = { name: string; area: WorkArea };
-const KEY = 'office.character-profiles.v1';
-export function installOfficeMenu(source: AgentSource, shared: boolean) {
-  let profiles: Record<string, Profile> = {};
-  try { profiles = JSON.parse(localStorage.getItem(KEY) ?? '{}'); } catch { /* use defaults */ }
-  if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) profiles = {};
+export function installOfficeMenu(source: AgentSource, shared: boolean, selectCharacter?: (id: string) => void) {
+  let profiles = readProfiles();
   const original = new Map<string, string>();
   const apply = () => {
     if (shared) return;
@@ -18,6 +16,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean) {
       if (!original.has(t.id)) original.set(t.id, t.name);
       const p = profiles[t.id];
       if (p && typeof p.name === 'string' && p.name.length <= 32) t.name = p.name;
+      t.characterStyle = isCharacterStyle(p?.style) ? cleanCharacterStyle(p.style) : undefined;
       t.workArea = B.areaLabels[p && WORK_AREAS.includes(p.area) ? p.area : 'general'];
     }
   };
@@ -55,7 +54,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean) {
   floating.addEventListener('click', () => dialog.showModal());
   dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
   const send = (data: unknown) => frame.contentWindow?.postMessage(data, location.origin);
-  const localCharacters = () => source.threads().map((t) => ({ id: t.id, name: t.name, provider: t.provider, status: t.status, area: profiles[t.id]?.area ?? 'general' }));
+  const localCharacters = () => source.threads().map((t) => ({ id: t.id, name: t.name, provider: t.provider, status: t.status, area: profiles[t.id]?.area ?? 'general', ...(t.characterStyle ? { style: t.characterStyle } : {}) }));
   let publishing: ReturnType<typeof setInterval> | undefined;
   let publishingBusy = false;
   let publisherGeneration = 0;
@@ -81,7 +80,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean) {
       await api('/publish', 'POST', { agents: agents.map(({ id, provider, status }) => ({ id, provider, status })) });
       for (const a of agents) {
         if (generation !== publisherGeneration) return;
-        const profile = { name: a.name.slice(0, 32), area: a.area };
+        const profile = { name: a.name.slice(0, 32), area: a.area, ...(a.style ? { style: a.style } : {}) };
         const value = JSON.stringify(profile);
         if (sentProfiles.get(a.id) !== value) {
           await api(`/characters/${a.id}`, 'POST', profile);
@@ -97,6 +96,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean) {
       send({ type: 'office-sharing-state', sharing: false });
     } finally { publishingBusy = false; }
   };
+  window.addEventListener('office-profile-change', () => { profiles = readProfiles(); apply(); if (publishing) void publish(); });
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
     const data = event.data;
@@ -111,11 +111,12 @@ export function installOfficeMenu(source: AgentSource, shared: boolean) {
       localStorage.setItem('office.appearance.v1', JSON.stringify(data.appearance));
       if (settings.get('theme') !== data.appearance.theme) { settings.set('theme', data.appearance.theme); return; }
       const next = new URL(location.href); next.searchParams.delete('theme'); location.assign(next);
+    } else if (data.type === 'office-character-select' && !shared && typeof data.id === 'string') {
+      if (source.threads().some((t) => t.id === data.id)) { dialog.close(); selectCharacter?.(data.id); }
     } else if (data.type === 'office-character-save' && !shared) {
       const t = source.threads().find((t) => t.id === data.id);
       if (!t || typeof data.name !== 'string' || !data.name.trim() || data.name.length > 32 || !WORK_AREAS.includes(data.area)) return;
-      profiles[t.id] = { name: data.name.trim(), area: data.area };
-      localStorage.setItem(KEY, JSON.stringify(profiles)); apply();
+      saveProfile(t.id, { ...profiles[t.id], name: data.name.trim(), area: data.area }); apply();
       send({ type: 'office-character-saved', id: t.id });
       if (publishing) void publish();
     } else if (data.type === 'office-menu-close') dialog.close();

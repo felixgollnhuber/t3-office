@@ -1,3 +1,4 @@
+import type { CharacterStyle } from './character-style';
 import type { Appearance } from './appearance';
 /** Minimal sharing contract. Deliberately excludes tasks, transcripts, paths, costs and tool output. */
 import type { Provider, Status } from './data';
@@ -21,7 +22,7 @@ export interface Floor {
 }
 export const WORK_AREAS = ['general', 'frontend', 'backend', 'design', 'testing', 'research', 'operations'] as const;
 export type WorkArea = (typeof WORK_AREAS)[number];
-export interface SharedAgent { id: string; name: string; provider: Provider; status: Status; area: WorkArea }
+export interface SharedAgent { id: string; name: string; provider: Provider; status: Status; area: WorkArea; style?: CharacterStyle }
 export interface OfficeSnapshot { office: Floor; agents: SharedAgent[] }
 export interface Grant { id: string; userName: string; userHandle: string; scope: 'presence' | 'activity' }
 export interface Invite { id: string; scope: 'presence' | 'activity'; expiresAt: number }

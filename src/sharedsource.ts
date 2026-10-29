@@ -53,7 +53,7 @@ export class SharedSource implements AgentSource {
         return areas.length > 2 ? B.moreAreas : areas.map((area) => B.areaLabels[area]).join(' / ');
       });
       const next = agents.map((a, i): Thread => ({
-        id: a.id, name: a.name, title: B.areaLabels[a.area], workArea: B.areaLabels[a.area], provider: a.provider, model: '', team: Math.floor(i / 6),
+        id: a.id, name: a.name, characterStyle: a.style, title: B.areaLabels[a.area], workArea: B.areaLabels[a.area], provider: a.provider, model: '', team: Math.floor(i / 6),
         status: a.status, tps: 0, toolCalls: 0, files: 0, context: 0, cost: 0, settled: false,
       }));
       const keep = new Set(next.map((a) => a.id));
