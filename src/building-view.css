@@ -35,3 +35,6 @@ body.building-view-open > #tags, body.building-view-open > #wall, body.building-
 @media(max-width:700px) { .building-world > header { bottom: 12px; width: calc(100vw - 24px); padding: 10px; gap: 8px; flex-direction: column; align-items: stretch; } .building-world header > div { display: flex; gap: 8px; align-items: center; } .building-world h1 { font-size: 16px; } .building-world header p { display: none; } .building-world nav { gap: 6px; justify-content: center; } .building-world nav button { font-size: 12px; padding: 7px; } .building-world aside { top: auto; bottom: 132px; right: 12px; left: 12px; width: auto; max-height: 45vh; padding: 12px; } .building-world-labels button { width: 120px; font-size: 11px; } .building-world-caption { display:none; } }
 .building-world-caption { display: none; }
 .building-world-invite { margin-top: 14px; width: 100%; }
+
+.building-world-moment { border-left:3px solid var(--accent);padding-left:10px;overflow-wrap:anywhere; }
+.building-world-moment small { display:block;margin-bottom:5px; }

@@ -14,6 +14,8 @@ try{
  await call(friend,'/office',{name:'Maya creative studio',appearance:{theme:'loft',layout:'lounge',lighting:'warm'}});
  await call(friend,'/publish',{agents:[{id:'demo-1',provider:'codex',status:'running'},{id:'demo-2',provider:'claude',status:'waiting'}]});
  for(const[ctx,scope]of[[friend,'activity'],[presence,'presence']]){const i=await call(ctx,'/invites',{scope});await call(owner,'/accept',{token:i.token});}
+ await call(friend,'/moments',{title:'A small synthetic win',kind:'shipped'});
+ await call(presence,'/moments',{title:'Presence-only private celebration',kind:'milestone'});
  const page=await owner.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`${base}?harness=1`);await page.locator('#open').click();await page.locator('.building-world[data-rendered=true]').waitFor();
  await page.getByRole('button',{name:'Floors',exact:true}).click(); await page.locator('.building-world-directory button').nth(2).waitFor();assert.equal(await page.getByText('secret_person',{exact:false}).count(),0);
@@ -25,6 +27,9 @@ try{
  assert.equal(await page.locator('.building-world').getAttribute('data-selected-floor'),'','Vertical swipe must not select a floor');
  await page.mouse.click(point.x,point.y);await page.waitForFunction(id=>document.querySelector('.building-world').dataset.selectedFloor===id,maya.office.id);
  assert.ok(await page.locator('.building-world-detail').innerText().then(t=>t.includes('Maya creative studio')&&t.includes('2 coworkers')));
+ assert.ok((await page.locator('.building-world-moment').innerText()).includes('A small synthetic win'));
+ assert.equal(await page.getByText('Presence-only private celebration',{exact:true}).count(),0);
+ assert.equal(await page.evaluate(id=>window.__buildingView.models.children.find(g=>g.userData.floorId===id).children.some(o=>o.isPointLight&&o.color.getHexString()==='ffd67b'),maya.office.id),true,'Published floor carries a warm celebration lantern');
  await page.waitForTimeout(200);await page.screenshot({path:'shots/building-floor-focus.png',timeout:60000});
  await page.getByRole('button',{name:'Whole building',exact:true}).click();assert.equal(await page.locator('.building-world').getAttribute('data-selected-floor'),'');
  await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Floors',exact:true}).click();await page.locator(`.building-world-directory [data-floor="${quiet.office.id}"]`).click();

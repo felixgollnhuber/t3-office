@@ -25,3 +25,11 @@ The original own-office view uses private local APIs only on an explicitly enabl
 This release is verified locally and is not publicly deployed. Public operation needs reviewed TLS/trusted-proxy configuration, account recovery, signup/abuse controls, backups and operational monitoring. The current service deliberately does not trust forwarding headers for origin/cookie decisions. Do not disable checks to make a proxy work.
 
 Report vulnerabilities privately to the maintainer of the repository where encountered. Do not post real conversations or credentials in public issues. This extension does not automatically contact upstream or send reports.
+
+## Explicit social features
+
+Focus sessions and moments are separate opt-ins, never inferred from private agent work. A host's current invitation grants gate session discovery and joining; participant names/quiet preferences are disclosed only to the host and explicitly joined peers. Presence-only guests can elect to join a focus session but still receive no agent activity or moments. Revocation removes membership; renewed permission does not restore it. Session membership is a chosen commitment, not live-person tracking. Timers expire on server time.
+
+Moments require owner-entered text, a local preview and a separate publication action; they are visible only to current activity guests. They do not establish that work was independently verified. Owners delete them; seven-day visibility and a 20-entry per-office cap bound retention (expired entries are pruned on social requests). A PNG export is owner-only in the UI, previews its exact allowlisted fields and never captures the scene or private HUD. Export does not upload anything. Recipients can retain information already disclosed.
+
+Stopping browser activity publishing does not end a focus session or delete a moment. Use those explicit controls or revoke the grant. Cookie sessions, origin/body checks and per-read authorization apply to social routes; publisher credentials cannot access them. Mutations reauthenticate after body arrival and check the optional UI actor precondition; social reads identify the authenticated viewer to reject blended account responses. UI failures clear social content, and an active timer is revalidated while minimized. Temporary local tour/timer hints contain no credentials or work contents.

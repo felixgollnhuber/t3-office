@@ -53,3 +53,6 @@ section { margin-top: 24px; }
 .sharing-summary > p { line-height: 1.6; margin-bottom: 10px; }
 .sharing-summary > h2:not(:first-child) { margin-top: 24px; }
 .character-select { width: 100%; text-align: left; margin-bottom: 12px; }
+
+.social-menu-actions { display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px; }
+.social-menu-actions button { font-size:14px; }

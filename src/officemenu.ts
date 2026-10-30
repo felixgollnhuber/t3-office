@@ -1,3 +1,4 @@
+import { installOfficeTour } from './tour';
 import type { BuildingRenderHost } from './building-view';
 import { travelToFloor } from './elevator';
 import { readProfiles, saveProfile } from './character-profiles';
@@ -10,6 +11,13 @@ import type { AgentSource } from './source';
 import { settings } from './settings';
 
 export function installOfficeMenu(source: AgentSource, shared: boolean, selectCharacter?: (id: string) => void, renderHost?: BuildingRenderHost) {
+  const tour = installOfficeTour();
+  let social: Promise<{ open(tab?: 'focus' | 'moments'): void }> | undefined;
+  const openSocial = async (tab: 'focus' | 'moments' = 'focus') => {
+    window.dispatchEvent(new Event('office-building-close')); dialog.close();
+    social ??= import('./social').then(({ installSocialOffice }) => installSocialOffice());
+    (await social).open(tab);
+  };
   let profiles = readProfiles();
   const original = new Map<string, string>();
   const apply = () => {
@@ -56,6 +64,8 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
   buildingButton.addEventListener('click', () => { window.dispatchEvent(new Event('office-building-open')); dialog.close(); void import('./building-view').then(({ openBuildingView }) => openBuildingView(() => dialog.showModal(), renderHost)); });
   document.body.append(buildingButton);
   if (new URLSearchParams(location.search).get('building') === '1') window.addEventListener('office-ready', () => { const next = new URL(location.href); next.searchParams.delete('building'); history.replaceState(null, '', next); buildingButton.click(); }, { once: true });
+  window.addEventListener('office-open-social', (event) => { const tab = (event as CustomEvent).detail?.tab; void openSocial(tab === 'moments' ? 'moments' : 'focus'); });
+  window.addEventListener('office-social-account', () => { window.dispatchEvent(new Event('office-building-close')); dialog.showModal(); });
   button.addEventListener('click', () => dialog.showModal());
   floating.addEventListener('click', () => dialog.showModal());
   dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
@@ -117,6 +127,10 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
       localStorage.setItem('office.appearance.v1', JSON.stringify(data.appearance));
       if (settings.get('theme') !== data.appearance.theme) { settings.set('theme', data.appearance.theme); return; }
       const next = new URL(location.href); next.searchParams.delete('theme'); location.assign(next);
+    } else if (data.type === 'office-open-social') {
+      void openSocial(data.tab === 'moments' ? 'moments' : 'focus');
+    } else if (data.type === 'office-start-tour') {
+      dialog.close(); window.dispatchEvent(new Event('office-building-close')); tour.start();
     } else if (data.type === 'office-open-building') {
       dialog.close(); buildingButton.click();
     } else if (data.type === 'office-character-select' && !shared && typeof data.id === 'string') {
@@ -163,4 +177,8 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
   });
   window.addEventListener('pagehide', () => { publisherGeneration++; clearInterval(profileTimer); clearInterval(publishing); publishing = undefined; pending = false; });
   if (invite) dialog.showModal();
+  // A hint contains no identity or content; the service must revalidate before showing the timer.
+  if (sessionStorage.getItem('office.focus-active.v1') === '1') { social ??= import('./social').then(({ installSocialOffice }) => installSocialOffice()); }
+  const initialSocial = new URLSearchParams(location.search).get('social');
+  if (initialSocial) window.addEventListener('office-ready', () => { void openSocial(initialSocial === 'moments' ? 'moments' : 'focus'); }, { once: true });
 }

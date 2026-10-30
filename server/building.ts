@@ -74,6 +74,12 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
     CREATE TABLE IF NOT EXISTS character_styles(office TEXT NOT NULL REFERENCES offices(id), agent TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(office,agent));
     CREATE TABLE IF NOT EXISTS appearance(office TEXT PRIMARY KEY REFERENCES offices(id), value TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS invites_office ON invites(office);
+    CREATE TABLE IF NOT EXISTS focus_sessions(id TEXT PRIMARY KEY, office TEXT NOT NULL UNIQUE REFERENCES offices(id), started INTEGER NOT NULL, ends INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS focus_members(session TEXT NOT NULL REFERENCES focus_sessions(id) ON DELETE CASCADE, user TEXT NOT NULL REFERENCES users(id), quiet INTEGER NOT NULL, PRIMARY KEY(session,user));
+    CREATE INDEX IF NOT EXISTS focus_members_user ON focus_members(user);
+    CREATE TABLE IF NOT EXISTS moments(id TEXT PRIMARY KEY, office TEXT NOT NULL REFERENCES offices(id), title TEXT NOT NULL, kind TEXT NOT NULL, created INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS moments_office_created ON moments(office,created);
+
   `);
   const one = (sql: string, ...values: (string | number)[]) => db.prepare(sql).get(...values) as Row | undefined;
   const all = (sql: string, ...values: (string | number)[]) => db.prepare(sql).all(...values) as Row[];
@@ -123,6 +129,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
     const online = !office.paused && typeof office.updated === 'number' && now() - office.updated < STALE;
     const agents = characters(office);
     const visibleActivity = online && (isOwner || level === 'activity');
+    const latestMoment = isOwner || level === 'activity' ? one('SELECT id,title,kind,created FROM moments WHERE office=? AND created>=? ORDER BY created DESC,id DESC LIMIT 1', String(office.id), now() - 7 * DAY) : undefined;
     const counts = new Map<string, number>();
     if (visibleActivity) for (const a of agents) counts.set(a.area, (counts.get(a.area) ?? 0) + 1);
     return {
@@ -131,10 +138,34 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
       isOwner, scope: isOwner ? 'owner' : level, online,
       ...(isOwner ? { paused: !!office.paused } : {}),
       ...(isOwner || level === 'activity' ? { appearance: appearance(office) } : {}),
+      ...(latestMoment ? { moment: { id: latestMoment.id, title: latestMoment.title, kind: latestMoment.kind, createdAt: latestMoment.created } } : {}),
       updatedAt: office.updated, agentCount: isOwner || (level === 'activity' && online) ? agents.length : 0,
       areas: [...counts].map(([area, count]) => ({ area, count })),
     };
   };
+  // Social information is explicitly entered/joined; it is never derived from agent work.
+  const access = (officeId: string, user: User) => {
+    const selected = one('SELECT owner FROM offices WHERE id=?', officeId);
+    return selected?.owner === user.id ? 'owner' : one('SELECT scope FROM grants WHERE office=? AND user=?', officeId, user.id)?.scope;
+  };
+  const pruneSocial = () => {
+    run('DELETE FROM focus_sessions WHERE ends<=?', now());
+    run('DELETE FROM moments WHERE created<?', now() - 7 * DAY);
+  };
+  const focus = (row: Row, user: User) => {
+    const officeId = String(row.office);
+    const members = all(`SELECT u.id AS userId,u.name,m.quiet FROM focus_members m JOIN users u ON u.id=m.user JOIN offices o ON o.id=? WHERE m.session=? AND (o.owner=u.id OR EXISTS(SELECT 1 FROM grants g WHERE g.office=o.id AND g.user=u.id)) ORDER BY u.id`, officeId, String(row.id));
+    const host = one('SELECT o.name AS officeName,u.id AS hostId,u.name AS hostName FROM offices o JOIN users u ON u.id=o.owner WHERE o.id=?', officeId)!;
+    const isHost = host.hostId === user.id;
+    const joined = members.some(m => m.userId === user.id);
+    return { id: row.id, officeId, officeName: host.officeName, hostId: host.hostId, hostName: host.hostName, startedAt: row.started, endsAt: row.ends, participantCount: members.length, participants: isHost || joined ? members.map(m => ({ userId: m.userId, name: m.name, quiet: !!m.quiet })) : [], isHost, joined };
+  };
+  const moment = (row: Row, user: User) => {
+    const owner = one('SELECT o.name AS officeName,u.id AS ownerId,u.name AS ownerName FROM offices o JOIN users u ON u.id=o.owner WHERE o.id=?', String(row.office))!;
+    return { id: row.id, officeId: row.office, officeName: owner.officeName, ownerName: owner.ownerName, title: row.title, kind: row.kind, createdAt: row.created, isOwner: owner.ownerId === user.id };
+  };
+  const quietInput = (value: unknown) => { if (typeof value !== 'boolean') fail(400, 'Choose a quiet preference.'); return value; };
+  const activeMembership = (user: User) => one('SELECT f.id FROM focus_sessions f JOIN focus_members m ON m.session=f.id WHERE m.user=? AND f.ends>?', user.id, now());
   const rates = new Map<string, { until: number; count: number }>();
   const limitAuth = (req: IncomingMessage) => {
     for (const [key, value] of rates) if (value.until <= now()) rates.delete(key);
@@ -211,10 +242,75 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
         const input = await body(req);
         // A request body may arrive slowly while a session/key is revoked in another request.
         user = req.headers.authorization ? authenticatePublisher(req) : authenticate(req);
+        if (input.actorId !== undefined && input.actorId !== user.id) fail(409, 'Your account changed. Reopen this action before continuing.');
         return input;
       };
       const office = ownOffice(user);
       if (match('/session', ['GET'])) return reply(200, session(user));
+      if (route === '/social' || route === '/focus' || route.startsWith('/focus/') || route === '/moments' || route.startsWith('/moments/')) pruneSocial();
+      if (match('/social', ['GET'])) {
+        const sessions = all(`SELECT f.* FROM focus_sessions f JOIN offices o ON o.id=f.office WHERE o.owner=? OR EXISTS(SELECT 1 FROM grants g WHERE g.office=o.id AND g.user=?) ORDER BY f.started DESC`, user.id, user.id);
+        const moments = all(`SELECT m.* FROM moments m JOIN offices o ON o.id=m.office WHERE o.owner=? OR EXISTS(SELECT 1 FROM grants g WHERE g.office=o.id AND g.user=? AND g.scope='activity') ORDER BY m.created DESC,m.id DESC LIMIT 20`, user.id, user.id);
+        return reply(200, { viewerId: user.id, serverNow: now(), sessions: sessions.map(r => focus(r, user)), moments: moments.map(r => moment(r, user)) });
+      }
+      if (match('/focus', ['POST'])) {
+        const input = await authorizedBody(); pruneSocial();
+        if (input.minutes !== 25 && input.minutes !== 50) fail(400, 'Choose a 25 or 50 minute session.');
+        const quiet = quietInput(input.quiet);
+        if (activeMembership(user) || one('SELECT id FROM focus_sessions WHERE office=?', String(ownOffice(user).id))) fail(409, 'Leave or end your current focus session first.');
+        const id = randomUUID(), officeId = String(ownOffice(user).id), started = now(), ends = started + input.minutes * 60_000;
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          run('INSERT INTO focus_sessions VALUES(?,?,?,?)', id, officeId, started, ends);
+          run('INSERT INTO focus_members VALUES(?,?,?)', id, user.id, Number(quiet));
+          db.exec('COMMIT');
+        } catch (e) { db.exec('ROLLBACK'); throw e; }
+        return reply(201, focus(one('SELECT * FROM focus_sessions WHERE id=?', id)!, user));
+      }
+      const focusMatch = route.match(/^\/focus\/([\w-]+)(?:\/(join|leave))?$/);
+      if (focusMatch) {
+        const action = focusMatch[2];
+        if (method !== (action ? 'POST' : 'DELETE')) fail(405, 'Method not allowed.');
+        const input = await authorizedBody(); pruneSocial();
+        const selected = one('SELECT * FROM focus_sessions WHERE id=?', focusMatch[1]);
+        if (!selected || !access(String(selected.office), user)) fail(404, 'Focus session not found.');
+        const isHost = access(String(selected.office), user) === 'owner';
+        if (!action) {
+          if (!isHost) fail(404, 'Focus session not found.');
+          run('DELETE FROM focus_sessions WHERE id=?', focusMatch[1]);
+          return reply(200, { ok: true });
+        }
+        if (action === 'leave') {
+          if (isHost) fail(409, 'End your hosted session instead of leaving it.');
+          run('DELETE FROM focus_members WHERE session=? AND user=?', focusMatch[1], user.id);
+          return reply(200, { ok: true });
+        }
+        const quiet = quietInput(input.quiet);
+        const membership = activeMembership(user);
+        if (membership && membership.id !== selected.id) fail(409, 'Leave or end your current focus session first.');
+        if (!one('SELECT user FROM focus_members WHERE session=? AND user=?', focusMatch[1], user.id) && Number(one('SELECT COUNT(*) AS count FROM focus_members WHERE session=?', focusMatch[1])!.count) >= 24) fail(409, 'This focus session is full.');
+        run('INSERT INTO focus_members VALUES(?,?,?) ON CONFLICT(session,user) DO UPDATE SET quiet=excluded.quiet', focusMatch[1], user.id, Number(quiet));
+        return reply(200, focus(selected, user));
+      }
+      if (match('/moments', ['POST'])) {
+        const input = await authorizedBody();
+        const title = text(input.title, 'milestone title', 80);
+        if (/[\u0000-\u001f\u007f]/.test(title)) fail(400, 'Use a visible milestone title.');
+        if (!['shipped', 'milestone', 'helped'].includes(String(input.kind))) fail(400, 'Choose a milestone type.');
+        const id = randomUUID(), officeId = String(ownOffice(user).id);
+        run('INSERT INTO moments VALUES(?,?,?,?,?)', id, officeId, title, String(input.kind), now());
+        // Bound each office and keep the newest publication even when timestamps tie.
+        run('DELETE FROM moments WHERE office=? AND id<>? AND id NOT IN (SELECT id FROM moments WHERE office=? AND id<>? ORDER BY created DESC,id DESC LIMIT 19)', officeId, id, officeId, id);
+        return reply(201, moment(one('SELECT * FROM moments WHERE id=?', id)!, user));
+      }
+      const momentMatch = route.match(/^\/moments\/([\w-]+)$/);
+      if (momentMatch) {
+        if (method !== 'DELETE') fail(405, 'Method not allowed.');
+        await authorizedBody();
+        if (!run('DELETE FROM moments WHERE id=? AND office=?', momentMatch[1], String(ownOffice(user).id)).changes) fail(404, 'Milestone not found.');
+        return reply(200, { ok: true });
+      }
+
       if (match('/logout', ['POST'])) {
         await authorizedBody();
         const raw = req.headers.cookie!.split(';').map((p) => p.trim()).find((p) => p.startsWith('building_session='))!.slice('building_session='.length);
@@ -342,6 +438,8 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
       if (grantMatch) {
         if (method !== 'DELETE') fail(405, 'Method not allowed.');
         await authorizedBody();
+        const revoked = one('SELECT user FROM grants WHERE id=? AND office=?', grantMatch[1], String(office.id));
+        if (revoked) run('DELETE FROM focus_members WHERE user=? AND session IN (SELECT id FROM focus_sessions WHERE office=?)', String(revoked.user), String(office.id));
         const result = run('DELETE FROM grants WHERE id=? AND office=?', grantMatch[1], String(office.id));
         if (!result.changes) fail(404, 'Access grant not found.');
         return reply(200, { ok: true });

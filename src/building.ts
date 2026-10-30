@@ -1,3 +1,4 @@
+import { locale } from './i18n';
 import { travelToFloor } from './elevator';
 import { settings } from './settings';
 import { DEFAULT_APPEARANCE, isAppearance, OFFICE_LAYOUTS, OFFICE_LIGHTING, type Appearance } from './appearance';
@@ -39,8 +40,9 @@ function notice(text: string, error = false) {
 async function run(task: () => Promise<void>) {
   try { await task(); } catch (error) { notice(error instanceof Error ? error.message : B.genericError, true); }
 }
+const socialLabels = locale({ en: {focus:'Build together', moments:'We shipped', tour:'Take a tour'}, de:{focus:'Gemeinsam arbeiten',moments:'Unsere Erfolge',tour:'Tour starten'} });
 function render() {
-  root.innerHTML = `<header><h1>${B.friendsMenu}</h1><button data-action="close" aria-label="${B.close}">×</button></header><nav class="menu-tabs" aria-label="${B.friendsMenu}">${(['friends', 'characters', 'sharing', 'style'] as const).map((t) => `<button data-tab="${t}" aria-pressed="${tab === t}">${t === 'friends' ? B.friends : t === 'characters' ? B.characters : t === 'style' ? B.decorate : B.sharing}</button>`).join('')}</nav><p id="notice" role="status" aria-live="polite" hidden></p><section id="panel"></section>`;
+  root.innerHTML = `<header><h1>${B.friendsMenu}</h1><button data-action="close" aria-label="${B.close}">×</button></header><nav class="menu-tabs" aria-label="${B.friendsMenu}">${(['friends', 'characters', 'sharing', 'style'] as const).map((t) => `<button data-tab="${t}" aria-pressed="${tab === t}">${t === 'friends' ? B.friends : t === 'characters' ? B.characters : t === 'style' ? B.decorate : B.sharing}</button>`).join('')}</nav><p id="notice" role="status" aria-live="polite" hidden></p><div class="social-menu-actions"><button data-action="focus">${socialLabels.focus}</button><button data-action="moments">${socialLabels.moments}</button><button data-action="tour">${socialLabels.tour}</button></div><section id="panel"></section>`;
   const panel = root.querySelector('#panel')!;
   if (tab === 'style') {
     panel.innerHTML = `<h2>${B.decorate}</h2><p class="hint">${B.styleHint}</p>${!local && embedded ? `<p>${B.styleVisitor}</p><button data-action="own">${B.own}</button>` : `<form id="style-form"><label>${B.themeLabel}<select name="theme">${THEMES.map((t) => `<option value="${t.id}" ${appearance.theme === t.id ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label><label>${B.layoutLabel}<select name="layout">${OFFICE_LAYOUTS.map((v, i) => `<option value="${v}" ${appearance.layout === v ? 'selected' : ''}>${[B.originalLayout, B.focusLayout, B.loungeLayout][i]}</option>`).join('')}</select></label><label>${B.lightingLabel}<select name="lighting">${OFFICE_LIGHTING.map((v, i) => `<option value="${v}" ${appearance.lighting === v ? 'selected' : ''}>${[B.originalLight, B.warmLight, B.coolLight][i]}</option>`).join('')}</select></label><p class="hint">${B.styleLocal}</p><button type="submit">${B.applyStyle}</button></form>`}`;
@@ -166,6 +168,8 @@ root.addEventListener('click', (event) => {
     }
     if (button.dataset.delete) { await api(`/${button.dataset.delete}/${encodeURIComponent(button.dataset.id!)}`, 'DELETE'); if (epoch !== generation || !session) return; if (button.dataset.delete === 'publisher-tokens') await renderKeys(); else await refreshFriends(); return; }
     switch (button.dataset.action) {
+      case 'focus': case 'moments': if (embedded) send({type:'office-open-social',tab:button.dataset.action === 'moments' ? 'moments' : 'focus'}); else location.assign('/?social=' + button.dataset.action); break;
+      case 'tour': if (embedded) send({type:'office-start-tour'}); else location.assign('/?tour=1'); break;
       case 'building': if (embedded) send({ type: 'office-open-building' }); else location.assign('/?building=1'); break;
       case 'refresh-access': await refreshFriends(); break;
       case 'close': if (embedded) send({ type: 'office-menu-close' }); else location.assign('/'); break;

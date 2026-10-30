@@ -15,6 +15,7 @@ export interface Floor {
   scope: 'owner' | 'presence' | 'activity';
   online: boolean;
   paused?: boolean;
+  moment?: { id: string; title: string; kind: 'shipped' | 'milestone' | 'helped'; createdAt: number };
   appearance?: Appearance;
   updatedAt: number | null;
   agentCount: number;

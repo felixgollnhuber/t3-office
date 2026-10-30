@@ -324,3 +324,124 @@ test('character style is owner-only, durable, validated and visible only with ac
     assert.equal((await f.request(`/offices/${owner.office.id}`, 'GET', undefined, guest.client)).status, 404);
   } finally { await f.close(); }
 });
+
+async function grant(f: Awaited<ReturnType<typeof fixture>>, owner: Awaited<ReturnType<Awaited<ReturnType<typeof fixture>>['register']>>, guest: Awaited<ReturnType<Awaited<ReturnType<typeof fixture>>['register']>>, scope: 'presence' | 'activity') {
+  const invitation = await f.request('/invites', 'POST', { scope }, owner.client);
+  assert.equal((await f.request('/accept', 'POST', { token: invitation.data.token }, guest.client)).status, 200);
+}
+
+test('focus requires consent, explicit membership and current grants; names stay hidden before joining', async () => {
+  const f = await fixture();
+  try {
+    const host = await f.register('focus_host'), guest = await f.register('focus_guest'), observer = await f.register('focus_observer'), stranger = await f.register('focus_stranger');
+    await grant(f, host, guest, 'presence'); await grant(f, host, observer, 'activity');
+    assert.equal((await f.request('/social')).status, 401);
+    assert.equal((await f.request('/focus', 'POST', { minutes: 30, quiet: true }, host.client)).status, 400);
+    assert.equal((await f.request('/focus', 'POST', { minutes: 25, quiet: 'yes' }, host.client)).status, 400);
+    const started = await f.request('/focus', 'POST', { minutes: 25, quiet: true }, host.client);
+    assert.equal(started.status, 201); const id = started.data.id;
+    assert.equal(started.data.endsAt - started.data.startedAt, 25 * 60_000);
+    assert.equal(started.data.joined, true); assert.equal(started.data.isHost, true); assert.equal(started.data.participants[0].quiet, true);
+    assert.equal((await f.request('/focus', 'POST', { minutes: 50, quiet: false }, host.client)).status, 409);
+    const preview = (await f.request('/social', 'GET', undefined, guest.client)).data;
+    assert.equal(preview.sessions.length, 1); assert.equal(preview.sessions[0].participantCount, 1); assert.deepEqual(preview.sessions[0].participants, []); assert.equal(preview.sessions[0].joined, false);
+    assert.deepEqual((await f.request('/social', 'GET', undefined, stranger.client)).data.sessions, []);
+    assert.equal((await f.request(`/focus/${id}/join`, 'POST', { quiet: false }, stranger.client)).status, 404);
+    assert.equal((await f.request(`/focus/${id}`, 'DELETE', {}, guest.client)).status, 404);
+    const joined = await f.request(`/focus/${id}/join`, 'POST', { quiet: false }, guest.client);
+    assert.equal(joined.status, 200); assert.equal(joined.data.participantCount, 2); assert.equal(joined.data.participants.length, 2);
+    assert.equal((await f.request('/focus', 'POST', { minutes: 25, quiet: false }, guest.client)).status, 409);
+    const observed = (await f.request('/social', 'GET', undefined, observer.client)).data.sessions[0];
+    assert.equal(observed.participantCount, 2); assert.deepEqual(observed.participants, []); assert.equal(JSON.stringify(observed).includes('focus_guest'), false);
+    assert.equal((await f.request(`/focus/${id}/leave`, 'POST', {}, host.client)).status, 409);
+    await f.restart();
+    assert.equal((await f.request('/social', 'GET', undefined, guest.client)).data.sessions[0].joined, true);
+    assert.equal((await f.request(`/focus/${id}/leave`, 'POST', {}, guest.client)).status, 200);
+    assert.equal((await f.request('/social', 'GET', undefined, host.client)).data.sessions[0].participantCount, 1);
+    await f.request(`/focus/${id}/join`, 'POST', { quiet: true }, guest.client);
+    const grants = (await f.request('/grants', 'GET', undefined, host.client)).data.grants;
+    const guestGrant = grants.find((g: { userHandle: string }) => g.userHandle === guest.user.handle);
+    await f.request(`/grants/${guestGrant.id}`, 'DELETE', {}, host.client);
+    assert.deepEqual((await f.request('/social', 'GET', undefined, guest.client)).data.sessions, []);
+    assert.equal((await f.request('/social', 'GET', undefined, host.client)).data.sessions[0].participantCount, 1);
+    assert.equal((await f.request(`/focus/${id}/join`, 'POST', { quiet: true }, guest.client)).status, 404);
+    await grant(f, host, guest, 'activity');
+    assert.equal((await f.request('/social', 'GET', undefined, guest.client)).data.sessions[0].joined, false, 'Regrant must not silently restore prior membership');
+    assert.equal((await f.request(`/focus/${id}`, 'DELETE', {}, host.client)).status, 200);
+    assert.deepEqual((await f.request('/social', 'GET', undefined, guest.client)).data.sessions, []);
+  } finally { await f.close(); }
+});
+
+test('focus expires on server time and rechecks revocation after a slow join body', async () => {
+  const f = await fixture();
+  try {
+    const host = await f.register('timer_host'), guest = await f.register('timer_guest');
+    await grant(f, host, guest, 'activity');
+    const first = (await f.request('/focus', 'POST', { minutes: 25, quiet: false }, host.client)).data;
+    f.advance(25 * 60_000);
+    const expired = (await f.request('/social', 'GET', undefined, guest.client)).data;
+    assert.deepEqual(expired.sessions, []); assert.equal(expired.serverNow, first.endsAt);
+    assert.equal((await f.request(`/focus/${first.id}/join`, 'POST', { quiet: true }, guest.client)).status, 404);
+    const fresh = (await f.request('/focus', 'POST', { minutes: 50, quiet: true }, host.client)).data;
+    let resolveResponse: (value: number) => void;
+    const response = new Promise<number>(resolve => { resolveResponse = resolve; });
+    const req = httpRequest(`${f.base}/api/building/focus/${fresh.id}/join`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: guest.client.cookie! } }, res => { res.resume(); res.on('end', () => resolveResponse(res.statusCode!)); });
+    req.on('error', error => { throw error; });
+    await new Promise<void>(resolve => req.write('{"quiet":', () => resolve()));
+    const access = (await f.request('/grants', 'GET', undefined, host.client)).data.grants[0];
+    await f.request(`/grants/${access.id}`, 'DELETE', {}, host.client);
+    req.end('true}'); assert.equal(await response, 404);
+    assert.equal((await f.request('/social', 'GET', undefined, host.client)).data.sessions[0].participantCount, 1);
+    const key = (await f.request('/publisher-tokens', 'POST', {}, host.client)).data.token;
+    assert.equal((await f.request('/focus', 'POST', { minutes: 25, quiet: true }, {}, { authorization: `Bearer ${key}` })).status, 401);
+  } finally { await f.close(); }
+});
+
+test('manually published moments are owner controlled, activity only, bounded and revoked per read', async () => {
+  const f = await fixture();
+  try {
+    const host = await f.register('moment_host'), activity = await f.register('moment_guest'), presence = await f.register('moment_presence'), stranger = await f.register('moment_stranger');
+    await grant(f, host, activity, 'activity'); await grant(f, host, presence, 'presence');
+    assert.equal((await f.request('/moments', 'POST', { title: '', kind: 'shipped' }, host.client)).status, 400);
+    assert.equal((await f.request('/moments', 'POST', { title: 'bad\ntitle', kind: 'shipped' }, host.client)).status, 400);
+    assert.equal((await f.request('/moments', 'POST', { title: 'x'.repeat(81), kind: 'shipped' }, host.client)).status, 400);
+    assert.equal((await f.request('/moments', 'POST', { title: 'A small release', kind: 'verified-agent-work' }, host.client)).status, 400);
+    const result = await f.request('/moments', 'POST', { title: 'Our first release', kind: 'shipped', privatePrompt: 'never-transfer-this' }, host.client);
+    assert.equal(result.status, 201); assert.equal(result.data.isOwner, true); assert.equal(result.data.title, 'Our first release');
+    const id = result.data.id;
+    assert.equal((await f.request(`/offices/${host.office.id}`, 'GET', undefined, activity.client)).data.office.moment.title, 'Our first release');
+    assert.equal('moment' in (await f.request(`/offices/${host.office.id}`, 'GET', undefined, presence.client)).data.office, false);
+    const feed = (await f.request('/social', 'GET', undefined, activity.client)).data;
+    assert.equal(feed.moments.length, 1); assert.equal(feed.moments[0].isOwner, false); assert.equal(JSON.stringify(feed).includes('never-transfer-this'), false);
+    assert.deepEqual((await f.request('/social', 'GET', undefined, presence.client)).data.moments, []);
+    assert.deepEqual((await f.request('/social', 'GET', undefined, stranger.client)).data.moments, []);
+    assert.equal((await f.request(`/moments/${id}`, 'DELETE', {}, activity.client)).status, 404);
+    const accessGrant = (await f.request('/grants', 'GET', undefined, host.client)).data.grants.find((g: { userHandle: string }) => g.userHandle === activity.user.handle);
+    await f.request(`/grants/${accessGrant.id}`, 'DELETE', {}, host.client);
+    assert.deepEqual((await f.request('/social', 'GET', undefined, activity.client)).data.moments, []);
+    await f.restart(); assert.equal((await f.request('/social', 'GET', undefined, host.client)).data.moments[0].id, id);
+    assert.equal((await f.request(`/moments/${id}`, 'DELETE', {}, host.client)).status, 200);
+    for (let i = 0; i < 24; i++) assert.equal((await f.request('/moments', 'POST', { title: `Milestone ${i}`, kind: 'milestone' }, host.client)).status, 201);
+    const recent = (await f.request('/social', 'GET', undefined, host.client)).data.moments;
+    assert.equal(recent.length, 20); assert.ok(recent.some((m: { title: string }) => m.title === 'Milestone 23'));
+    const key = (await f.request('/publisher-tokens', 'POST', {}, host.client)).data.token;
+    assert.equal((await f.request('/moments', 'POST', { title: 'Publisher must not approve', kind: 'helped' }, {}, { authorization: `Bearer ${key}` })).status, 401);
+    f.advance(7 * 86_400_000 - 1000);
+    // Session is still valid, while oldest moments cross the seven-day boundary below.
+    assert.equal((await f.request('/social', 'GET', undefined, host.client)).data.moments.length, 20);
+    const login = await f.request('/login', 'POST', { handle: host.user.handle, password: 'correct-horse-battery' }, host.client); assert.equal(login.status, 200);
+    f.advance(1001); assert.deepEqual((await f.request('/social', 'GET', undefined, host.client)).data.moments, []);
+  } finally { await f.close(); }
+});
+
+test('social mutation intent cannot transfer to a different signed-in account', async () => {
+  const f = await fixture();
+  try {
+    const a = await f.register('intent_alice'), b = await f.register('intent_bobby');
+    assert.equal((await f.request('/moments', 'POST', {title:'Alice private draft',kind:'shipped',actorId:a.user.id}, b.client)).status, 409);
+    assert.deepEqual((await f.request('/social','GET',undefined,b.client)).data.moments, []);
+    assert.equal((await f.request('/focus','POST',{minutes:25,quiet:true,actorId:a.user.id},b.client)).status,409);
+    assert.deepEqual((await f.request('/social','GET',undefined,b.client)).data.sessions, []);
+    assert.equal((await f.request('/moments','POST',{title:'Approved by Bobby',kind:'milestone',actorId:b.user.id},b.client)).status,201);
+  } finally { await f.close(); }
+});

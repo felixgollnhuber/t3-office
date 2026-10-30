@@ -12,7 +12,7 @@ import { B } from './i18n/building';
 import { locale } from './i18n';
 import { travelToFloor } from './elevator';
 import './building-view.css';
-const T = locale({ en: { title: 'The Building', floors: 'Floors', hint: 'Click a floor to focus. Drag to turn the building.', all: 'Whole building', close: 'Back to office', friends: 'Friends & invitations', enter: 'Enter this office', choose: 'Pick a floor', chooseHint: 'Every office is a place you can visit. Select one in the building or directory to look closer.', privacy: 'Only your office and floors shared with you appear here.', own: 'Your office', home: 'Home floor', presence: 'Presence only · interior private', active: 'Activity shared', ownerScope: 'Your office · invited access only', offline: 'Offline', online: 'Online', agents: 'coworkers', loading: 'Opening your building…', error: 'Building unavailable. Floor details have been cleared.', retry: 'Try again', local: 'Your office works without an account. Invite friends from the in-office menu to add their floors.', focus: 'Floor focus', count: 'offices', limited: 'The 3D view shows a section of this tall building. Choose any office in the directory.', preview: 'Stylized office previews · no tasks or transcripts' }, de: { title: 'Das Gebäude', floors: 'Etagen', hint: 'Etage zum Fokussieren anklicken. Ziehen zum Drehen.', all: 'Ganzes Gebäude', close: 'Zurück zum Büro', friends: 'Freunde & Einladungen', enter: 'Dieses Büro betreten', choose: 'Wähle eine Etage', chooseHint: 'Wähle ein Büro im Gebäude oder Verzeichnis, um es näher anzusehen.', privacy: 'Nur dein Büro und mit dir geteilte Etagen erscheinen hier.', own: 'Dein Büro', home: 'Eigene Etage', presence: 'Nur Anwesenheit · Innenraum privat', active: 'Aktivität geteilt', ownerScope: 'Dein Büro · nur eingeladener Zugriff', offline: 'Offline', online: 'Online', agents: 'Kollegen', loading: 'Dein Gebäude wird geöffnet…', error: 'Gebäude nicht verfügbar. Etageninformationen wurden entfernt.', retry: 'Erneut versuchen', local: 'Dein Büro funktioniert ohne Konto. Lade über das Büromenü Freunde ein, um ihre Etagen hinzuzufügen.', focus: 'Etagenansicht', count: 'Büros', limited: 'Die 3D-Ansicht zeigt einen Abschnitt dieses hohen Gebäudes. Wähle jedes Büro im Verzeichnis.', preview: 'Stilisierte Büroansichten · keine Aufgaben oder Gespräche' } });
+const T = locale({ en: { title: 'The Building', floors: 'Floors', hint: 'Click a floor to focus. Drag to turn the building.', all: 'Whole building', close: 'Back to office', friends: 'Friends & invitations', enter: 'Enter this office', choose: 'Pick a floor', chooseHint: 'Every office is a place you can visit. Select one in the building or directory to look closer.', privacy: 'Only your office and floors shared with you appear here.', own: 'Your office', home: 'Home floor', presence: 'Presence only · interior private', active: 'Activity shared', ownerScope: 'Your office · invited access only', moment: 'Owner-published moment', offline: 'Offline', online: 'Online', agents: 'coworkers', loading: 'Opening your building…', error: 'Building unavailable. Floor details have been cleared.', retry: 'Try again', local: 'Your office works without an account. Invite friends from the in-office menu to add their floors.', focus: 'Floor focus', count: 'offices', limited: 'The 3D view shows a section of this tall building. Choose any office in the directory.', preview: 'Stylized office previews · no tasks or transcripts' }, de: { title: 'Das Gebäude', floors: 'Etagen', hint: 'Etage zum Fokussieren anklicken. Ziehen zum Drehen.', all: 'Ganzes Gebäude', close: 'Zurück zum Büro', friends: 'Freunde & Einladungen', enter: 'Dieses Büro betreten', choose: 'Wähle eine Etage', chooseHint: 'Wähle ein Büro im Gebäude oder Verzeichnis, um es näher anzusehen.', privacy: 'Nur dein Büro und mit dir geteilte Etagen erscheinen hier.', own: 'Dein Büro', home: 'Eigene Etage', presence: 'Nur Anwesenheit · Innenraum privat', active: 'Aktivität geteilt', ownerScope: 'Dein Büro · nur eingeladener Zugriff', moment: 'Vom Besitzer veröffentlichter Moment', offline: 'Offline', online: 'Online', agents: 'Kollegen', loading: 'Dein Gebäude wird geöffnet…', error: 'Gebäude nicht verfügbar. Etageninformationen wurden entfernt.', retry: 'Erneut versuchen', local: 'Dein Büro funktioniert ohne Konto. Lade über das Büromenü Freunde ein, um ihre Etagen hinzuzufügen.', focus: 'Etagenansicht', count: 'Büros', limited: 'Die 3D-Ansicht zeigt einen Abschnitt dieses hohen Gebäudes. Wähle jedes Büro im Verzeichnis.', preview: 'Stilisierte Büroansichten · keine Aufgaben oder Gespräche' } });
 const esc = (v: string) => v.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 let closeCurrent: (() => void) | undefined;
 export interface BuildingRenderHost {
@@ -66,6 +66,7 @@ export async function openBuildingView(openFriends: () => void, host?: BuildingR
   };
   const box = (parent: THREE.Object3D, color: string, x: number, y: number, z: number, w: number, h: number, d: number) => { const mesh = new THREE.Mesh(unit, mat(color)); mesh.position.set(x, y, z); mesh.scale.set(w, h, d); mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh); return mesh; };
   const models = new THREE.Group(); scene.add(models);
+  const momentLamps: {light:THREE.PointLight;at:number}[] = [];
   const rings = new Map<string, THREE.LineSegments>(); const rowY = new Map<string, number>();
   const ringMaterial = new THREE.LineBasicMaterial({ color: '#ffda83' });
   const target = new THREE.Vector3(0, 4, 0); const wanted = target.clone(); let half = 12; let wantedHalf = 12; let zoom = 1; let yaw = .5; let goalYaw = .5;
@@ -81,7 +82,7 @@ export async function openBuildingView(openFriends: () => void, host?: BuildingR
     root.dataset.controlsOpen = String(!!selected || root.dataset.directoryOpen === 'true');
     for (const b of root.querySelectorAll<HTMLElement>('[data-floor]')) b.setAttribute('aria-pressed', String(b.dataset.floor === selected));
     const f = floors.find(f => f.id === selected);
-    detail.innerHTML = f ? `<small>${T.focus}</small><h2>${esc(f.name)}</h2><p>${esc(f.ownerName)}</p><p>${f.online ? T.online : T.offline} · ${f.isOwner ? T.ownerScope : f.scope === 'presence' ? T.presence : T.active}</p>${f.scope !== 'presence' ? `<p>${f.agentCount} ${T.agents}</p><p>${f.areas.map(a => `${B.areaLabels[a.area]} (${a.count})`).join(' · ')}</p>` : ''}<button class="building-world-enter" data-action="enter">${f.isOwner ? B.own : T.enter}</button>` : `<h2>${T.choose}</h2><p>${T.chooseHint}</p>`;
+    detail.innerHTML = f ? `<small>${T.focus}</small><h2>${esc(f.name)}</h2><p>${esc(f.ownerName)}</p><p>${f.online ? T.online : T.offline} · ${f.isOwner ? T.ownerScope : f.scope === 'presence' ? T.presence : T.active}</p>${f.scope !== 'presence' ? `<p>${f.agentCount} ${T.agents}</p><p>${f.areas.map(a => `${B.areaLabels[a.area]} (${a.count})`).join(' · ')}</p>` : ''}${f.moment && f.scope !== 'presence' ? `<p class="building-world-moment"><small>★ ${T.moment}</small>${esc(f.moment.title)}</p>` : ''}<button class="building-world-enter" data-action="enter">${f.isOwner ? B.own : T.enter}</button>` : `<h2>${T.choose}</h2><p>${T.chooseHint}</p>`;
   }
   function fit(resetDirectory: boolean | Event = true) {
     if (resetDirectory !== false) root.dataset.directoryOpen = 'false';
@@ -98,7 +99,7 @@ export async function openBuildingView(openFriends: () => void, host?: BuildingR
     cabinTarget = rowY.get(id) ?? 0; paintSelection(); if (resetScroll) root.querySelector('aside')!.scrollTop = 0;
   }
   function build() {
-    models.clear(); figureGeometries.forEach(g => g.dispose()); figureGeometries.clear(); figures.length = 0; rings.clear(); rowY.clear(); labelLayer.replaceChildren();
+    models.clear(); figureGeometries.forEach(g => g.dispose()); figureGeometries.clear(); figures.length = 0; momentLamps.length = 0; rings.clear(); rowY.clear(); labelLayer.replaceChildren();
     const shown = floors.slice(windowStart, windowStart + 24); const total = shown.length * 3.4;
     box(models, theme.slab, 0, -3.6, 0, 36, .6, 25);
     box(models, '#839188', 0, -3.15, 0, 16, .3, 10);
@@ -139,9 +140,13 @@ export async function openBuildingView(openFriends: () => void, host?: BuildingR
         if (f.appearance?.layout === 'lounge') { box(group, '#a37388', 2.8, .7, 2.3, 4, .8, 1); box(group, '#a37388', 2.8, 1.2, 2.75, 4, .75, .25); }
         for (const x of [-5.8, 5.8]) { box(group, '#bf9575', x, .5, -2.7, .55, .6, .55); const plant = new THREE.Mesh(leaves, mat('#527f59')); plant.position.set(x, 1.2, -2.7); plant.scale.set(.6, .8, .6); group.add(plant); }
       }
+      if (f.moment && f.scope !== 'presence') {
+        box(group, '#e8bd61', 5.8, .7, 3.45, .8, .8, .55); box(group, '#fff0b8', 5.8, 1.35, 3.45, .36, .5, .36);
+        const light = new THREE.PointLight('#ffd67b', 2, 8, 1.5); light.position.set(5.8, 1.5, 3); group.add(light); momentLamps.push({light,at:f.moment.createdAt});
+      }
       box(group, f.online ? '#8dcba4' : '#bdac83', 0, .38, 3.95, 13, .12, .15);
       const ring = new THREE.LineSegments(edges, ringMaterial); ring.scale.set(14.2, 3.15, 8.2); ring.position.y = 1.4; ring.visible = false; group.add(ring); rings.set(f.id, ring);
-      const label = document.createElement('button'); label.dataset.floor = f.id; label.textContent = f.isOwner ? `${T.home} · ${f.name}` : `${windowStart + i + 1} · ${f.name}`; labelLayer.append(label);
+      const label = document.createElement('button'); label.dataset.floor = f.id; label.textContent = (f.moment && f.scope !== 'presence' ? '★ ' : '') + (f.isOwner ? `${T.home} · ${f.name}` : `${windowStart + i + 1} · ${f.name}`); labelLayer.append(label);
     });
     // Cutaway roof leaves the front of the top office visible.
     box(models, '#899a8c', 0, total - .1, -2.7, 14, .4, 2.6); box(models, '#657b75', -3, total + .4, -2.7, 2, .7, 1.2);
@@ -213,6 +218,7 @@ export async function openBuildingView(openFriends: () => void, host?: BuildingR
     camera.left = -half * width / height; camera.right = half * width / height; camera.top = half; camera.bottom = -half; camera.updateProjectionMatrix(); camera.updateMatrixWorld();
     if (cabin) cabin.position.y += (cabinTarget + 1.3 - cabin.position.y) * k;
     host?.sync(scene, sun, hemi);
+    for (const {light,at} of momentLamps) { const age = Date.now() - at; light.intensity = !motion.matches && age >= 0 && age < 8000 ? 2 + Math.sin(age / 8000 * Math.PI) * 3 : 2; }
     figures.forEach((ch, i) => ch.setPose('typing', motion.matches ? 0 : now / 1000 + i));
     if (host) host.render(scene, camera); else fallback!.render(scene, camera);
     for (const label of labelLayer.querySelectorAll<HTMLElement>('button')) { const y = rowY.get(label.dataset.floor!) ?? 0; const p = new THREE.Vector3(host ? 0 : -6.8, y + 1.6, 3.9).project(camera); label.style.left = `${Math.max(10, Math.min(width - 150, (p.x + 1) / 2 * width - (host ? 70 : 130)))}px`; label.style.top = `${(1 - p.y) / 2 * height}px`; label.hidden = (!!selected && selected !== label.dataset.floor) || p.y < -.94 || p.y > .94; }

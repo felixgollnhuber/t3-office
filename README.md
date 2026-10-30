@@ -88,3 +88,17 @@ The existing starter history and Felix Gollnhuber's MIT license/authorship are r
 Run `npm run demo:friends`, then open http://127.0.0.1:5175/preview/building for the complete interactive building, http://127.0.0.1:5175/preview/start for your simulated office or http://127.0.0.1:5175/preview/visit to visit Maya directly. Friends → Elevator shows both floors. Maya has eight synthetic coworkers with changing status, chosen names/work areas and a warm lounge style. The preview banner links between both offices.
 
 This is a disposable, loopback-only demo with automatically signed-in synthetic accounts and an accepted synthetic invitation. It uses a temporary database, disables private T3 endpoints and never publishes real activity. The separate `127.0.0.1` host keeps its cookies apart from the normal `localhost` office; do not use it as a public service. Ctrl+C stops the simulation and removes its temporary database on clean shutdown. Restarting creates a fresh demo. Optional verification: `node scripts/friend-preview.mjs --check-browser`.
+
+## Build together, celebrate, and take a tour
+
+The original office remains home. Open **Friends & characters** and choose:
+
+- **Build together**: start a 25- or 50-minute focus session, or explicitly join an invited friend's session. Joining shares your chosen display name and quiet preference with the host and joined participants. Close the panel to work in your office; its small timer stays visible and can reopen the session. Quiet mode suppresses the gentle halfway check-in. Leave or end the session when finished.
+- **We shipped**: enter a short milestone, preview the audience/text, then explicitly publish to activity guests. Nothing is read from your agents or published automatically. Activity-granted friends also see the latest moment and a celebration lantern on your building floor. Owners can delete a moment or preview/download a safe PNG card; the export contains only the chosen title, kind, display name and date. A moment is owner-reported, not independent proof of completion. No upload occurs.
+- **Take a tour**: replay the short guided visit. You control every join/publication; Skip is always available. Reduced motion follows your system preference.
+
+Focus sessions and moments use your optional building account. The existing invitation grant controls who can discover/join your session; only activity guests see moments. Joining is always a separate choice. Revocation removes membership and access; regranting does not rejoin. Sessions expire on server time, and moments retain for seven days with at most 20 per office/feed. Stopping agent activity sharing does not end a session or delete a moment—use those explicit controls.
+
+For the full two-office first tour, run `npm run demo:friends` and open [the guided simulation](http://127.0.0.1:5175/preview/tour). This loopback-only launcher uses disposable synthetic identities, preaccepted demo invitations, Maya's simulated focus session and one simulated moment. Normal app routes never automatically sign in or create consent. The tour is user-paced; “30-second tour” is an invitation to explore, not a forced timer.
+
+Verification: `npm test`, `npm run build`, `npm run test:e2e` (including the social browser checks), and `npm run test:tour`. `npm run test:social` runs just the synthetic multi-user social flow. No real private provider data is required.
