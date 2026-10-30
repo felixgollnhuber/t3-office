@@ -107,5 +107,32 @@ try {
   await network.unrouteAll({ behavior: 'ignoreErrors' });
   await network.waitForFunction(() => window.__testsource?.threads().length === 1 && !document.querySelector('.shared-connection-cover'), { timeout: 20_000 });
   await network.close();
+  // Mutations from account A may never render secrets or restore state in account B.
+  for (const kind of ['key', 'invite', 'name']) {
+    await request(context, '/login', { handle: 'alice', password });
+    const page = await context.newPage(); await page.goto(`${base}?view=friends`);
+    await page.locator('#invite-form').waitFor();
+    if (kind !== 'invite') await page.getByRole('button', { name: 'Sharing', exact: true }).click();
+    let releaseMutation, capturedMutation;
+    const gate = new Promise(r => { releaseMutation = r; }); const ready = new Promise(r => { capturedMutation = r; });
+    const endpoint = kind === 'key' ? 'publisher-tokens' : kind === 'invite' ? 'invites' : 'office';
+    await page.route(`**/api/building/${endpoint}`, async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      const response = await route.fetch(); capturedMutation(); await gate; await route.fulfill({ response });
+    });
+    if (kind === 'key') await page.locator('[data-action="create-key"]').click();
+    else await page.locator(`#${kind === 'invite' ? 'invite' : 'name'}-form button[type="submit"]`).click();
+    await ready;
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click(); await page.locator('#auth-form').waitFor();
+    await page.getByRole('button', { name: 'Already have an office? Sign in', exact: true }).click();
+    await page.locator('#auth-form input[name="handle"]').fill('bobby'); await page.locator('#auth-form input[name="password"]').fill(password);
+    await page.locator('#auth-form button[type="submit"]').click(); await page.locator('.account').waitFor();
+    if (kind !== 'invite') await page.getByRole('button', { name: 'Sharing', exact: true }).click();
+    releaseMutation(); await page.unrouteAll({ behavior: 'wait' }); await page.evaluate(() => new Promise(requestAnimationFrame));
+    assert.equal(await page.locator('#key-result textarea, #invite-result textarea').count(), 0, `Late ${kind} must not disclose the previous account secret`);
+    await page.getByRole('button', { name: 'Friends', exact: true }).click();
+    assert.match(await page.locator('.account').innerText(), /bobby/i, `Late ${kind} must not restore Alice`);
+    await page.close();
+  }
   console.log('PASS: stale accounts/style saves cannot survive logout; pagehide cancels pending publication; stop supersedes delayed unpause; stalled snapshots are covered and recover without a renderer.');
 } finally { await browser?.close(); await server.close(); await rm(dir, { recursive: true, force: true }); }

@@ -152,3 +152,17 @@ test('unreadable files are flagged with cached fallback or refuse an incomplete 
   await assert.rejects(collect(), /refusing to return incomplete totals/);
   rmSync(path, { recursive: true });
 });
+
+// A changed timestamp at identical size must invalidate the whole cached prefix.
+test('same-size early rewrite is rescanned even when the checkpoint tail is unchanged', async () => {
+  const dir = join(process.env.CLAUDE_CONFIG_DIR!, 'projects', 'rewrite'); mkdirSync(dir, { recursive: true });
+  const path = join(dir, 'rewrite.jsonl');
+  const content = (input: number) => JSON.stringify({ type: 'assistant', timestamp: new Date(time).toISOString(), sessionId: 'rewrite', message: { id: 'rewrite-msg', model: 'fixture-model', usage: { input_tokens: input, output_tokens: 20 } } }) + '\n' + '{}\n'.repeat(100);
+  writeFileSync(path, content(30));
+  const first = (await collect()).files.find(f => f.path === path)!;
+  writeFileSync(path, content(90)); const changed = new Date(Date.now() + 2000); utimesSync(path, changed, changed);
+  const second = (await collect()).files.find(f => f.path === path)!;
+  assert.equal(first.records[0].u, 30);
+  assert.equal(second.records[0].u, 90);
+  rmSync(path);
+});

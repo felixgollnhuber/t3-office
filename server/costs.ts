@@ -435,8 +435,8 @@ export async function collect(): Promise<Corpus> {
       return;
     }
     let base: FileState;
-    if (prev && st.size >= prev.size && await guardMatches(path, prev)) base = { ...prev, records: prev.records.slice(0, prev.records.length - prev.tail), tail: 0 };
-    else if (cached && cached.canResume && st.size >= cached.size && await guardMatches(path, cached)) {
+    if (prev && (st.size > prev.size || (st.size === prev.size && st.mtimeMs === prev.mtime)) && await guardMatches(path, prev)) base = { ...prev, records: prev.records.slice(0, prev.records.length - prev.tail), tail: 0 };
+    else if (cached && cached.canResume && (st.size > cached.size || (st.size === cached.size && st.mtimeMs === cached.mtime)) && await guardMatches(path, cached)) {
       // resume where T3 stopped; its tail records get re-read from the offset
       base = { provider, size: cached.size, mtime: cached.mtime, offset: cached.offset, state: cached.state, records: cached.records.slice(0, cached.records.length - cached.tail), live: false, guardLength: cached.guardLength, guardHash: cached.guardHash, tail: 0 };
       if (st.size === cached.size && cached.tail === 0) {

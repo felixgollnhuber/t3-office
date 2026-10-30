@@ -21,6 +21,8 @@ try{
  await page.waitForTimeout(200);await mkdir('shots',{recursive:true});await page.screenshot({path:'shots/building-world.png',timeout:60000});
  // Project a real front-edge mesh point and click the actual WebGL canvas, not a mock selection hook.
  const point=await page.evaluate(id=>{const v=window.__buildingView;const g=v.models.children.find(g=>g.userData.floorId===id);const p=g.position.clone();p.y+=.38;p.z+=3.95;p.project(v.camera);const r=document.querySelector('.building-world canvas').getBoundingClientRect();return{x:r.left+(p.x+1)/2*r.width,y:r.top+(1-p.y)/2*r.height};},maya.office.id);
+ await page.mouse.move(point.x,point.y-35); await page.mouse.down(); await page.mouse.move(point.x,point.y,{steps:5}); await page.mouse.up();
+ assert.equal(await page.locator('.building-world').getAttribute('data-selected-floor'),'','Vertical swipe must not select a floor');
  await page.mouse.click(point.x,point.y);await page.waitForFunction(id=>document.querySelector('.building-world').dataset.selectedFloor===id,maya.office.id);
  assert.ok(await page.locator('.building-world-detail').innerText().then(t=>t.includes('Maya creative studio')&&t.includes('2 coworkers')));
  await page.waitForTimeout(200);await page.screenshot({path:'shots/building-floor-focus.png',timeout:60000});

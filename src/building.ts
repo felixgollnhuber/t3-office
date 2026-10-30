@@ -119,6 +119,7 @@ async function logout() { generation++; await api('/logout', 'POST'); session = 
 root.addEventListener('submit', (event) => {
   event.preventDefault(); const form = event.target as HTMLFormElement; const data = Object.fromEntries(new FormData(form));
   const button = form.querySelector<HTMLButtonElement>('[type="submit"]')!; button.disabled = true;
+  const epoch = generation;
   void run(async () => {
     if (form.id === 'style-form') {
       if (!isAppearance(data)) return;
@@ -134,23 +135,27 @@ root.addEventListener('submit', (event) => {
         else location.assign(home);
       }
     }
-    else if (form.id === 'auth-form') { generation++; session = await api<Session>(`/${authMode}`, 'POST', data); render(); }
+    else if (form.id === 'auth-form') { const authEpoch = ++generation; const result = await api<Session>(`/${authMode}`, 'POST', data); if (authEpoch !== generation) return; session = result; render(); }
     else if (form.dataset.character) {
       if (local) send({ type: 'office-character-save', id: form.dataset.character, ...data });
-      else { await api(`/characters/${encodeURIComponent(form.dataset.character)}`, 'POST', data); notice(B.characterSaved); }
+      else { await api(`/characters/${encodeURIComponent(form.dataset.character)}`, 'POST', data); if (epoch !== generation || !session) return; notice(B.characterSaved); }
     } else if (form.id === 'invite-form') {
       const result = await api<{ token: string }>('/invites', 'POST', data);
+      if (epoch !== generation || !session || !form.isConnected) return;
       const link = new URL(location.href); link.searchParams.delete('view'); link.searchParams.delete('theme'); link.hash = new URLSearchParams({ invite: result.token }).toString();
       root.querySelector('#invite-result')!.innerHTML = `<p>${B.inviteReady}</p><textarea readonly aria-label="${B.token}">${esc(link.href)}</textarea><button data-action="copy">${B.copy}</button>`; await refreshFriends();
     } else if (form.id === 'accept-form') {
       const result = await api<{ officeId: string }>('/accept', 'POST', { token: inviteCode(String(data.token)) });
+      if (epoch !== generation || !session) return;
       invitation = ''; sessionStorage.removeItem('building.invitation'); notice(B.joined); await refreshFriends();
+      if (epoch !== generation || !session) return;
       send({ type: 'office-visit-floor', id: result.officeId });
-    } else if (form.id === 'name-form') { session = await api<Session>('/office', 'POST', data); notice(B.saved); }
+    } else if (form.id === 'name-form') { const result = await api<Session>('/office', 'POST', data); if (epoch !== generation || !session) return; session = result; notice(B.saved); }
   }).finally(() => { button.disabled = false; });
 });
 root.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!button) return;
+  const epoch = generation;
   void run(async () => {
     if (button.dataset.characterSelect) { send({ type: 'office-character-select', id: button.dataset.characterSelect }); return; }
     if (button.dataset.tab) { tab = button.dataset.tab as typeof tab; render(); return; }
@@ -159,7 +164,7 @@ root.addEventListener('click', (event) => {
       if (embedded) send(data); else { void travelToFloor(button.dataset.own === 'true' ? null : button.dataset.floor); }
       return;
     }
-    if (button.dataset.delete) { await api(`/${button.dataset.delete}/${encodeURIComponent(button.dataset.id!)}`, 'DELETE'); if (button.dataset.delete === 'publisher-tokens') await renderKeys(); else await refreshFriends(); return; }
+    if (button.dataset.delete) { await api(`/${button.dataset.delete}/${encodeURIComponent(button.dataset.id!)}`, 'DELETE'); if (epoch !== generation || !session) return; if (button.dataset.delete === 'publisher-tokens') await renderKeys(); else await refreshFriends(); return; }
     switch (button.dataset.action) {
       case 'building': if (embedded) send({ type: 'office-open-building' }); else location.assign('/?building=1'); break;
       case 'refresh-access': await refreshFriends(); break;
@@ -169,8 +174,12 @@ root.addEventListener('click', (event) => {
       case 'logout': if (sharing || pendingShare) { logoutPending = true; send({ type: 'office-share-stop' }); } else await logout(); break;
       case 'share': pendingShare = true; renderSharingState(); send({ type: sharing ? 'office-share-stop' : 'office-share-start' }); break;
       case 'create-key': {
-        const key = await api<{ token: string }>('/publisher-tokens', 'POST');
-        root.querySelector('#key-result')!.innerHTML = `<p>${B.keyReady}</p><textarea readonly aria-label="${B.publisher}">${esc(key.token)}</textarea><button data-action="copy">${B.copyKey}</button>`; await renderKeys(); break;
+        button.disabled = true;
+        let key: { token: string };
+        try { key = await api<{ token: string }>('/publisher-tokens', 'POST'); } finally { button.disabled = false; }
+        if (epoch !== generation || !session || !button.isConnected) return;
+        const result = root.querySelector('#key-result'); if (!result) return;
+        result.innerHTML = `<p>${B.keyReady}</p><textarea readonly aria-label="${B.publisher}">${esc(key.token)}</textarea><button data-action="copy">${B.copyKey}</button>`; await renderKeys(); break;
       }
       case 'copy': {
         const area = button.parentElement!.querySelector('textarea')!;
