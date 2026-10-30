@@ -39,3 +39,11 @@
 .elevator-overlay.reduced-motion *, .elevator-overlay.reduced-motion *::before, .elevator-overlay.reduced-motion *::after { transition: none !important; animation: none !important; }
 .elevator-overlay.reduced-motion .elevator-stage { display: none; }
 @media(max-width:600px) { .cutaway-building { width: 88vw; } .mini-desk { width: 30px; } .elevator-console { gap: 8px; padding: 10px; bottom: 10px; } .elevator-console > b { display:none; } }
+/* Travel uses the same paper controls and, from building mode, the actual office-rendered scene. */
+.elevator-overlay { font: 500 16px var(--font, 'Pixelify Sans'), monospace; }
+.elevator-console { color: var(--ink,#f4efd9); background: var(--paper,#17232d); border-color: var(--edge,#a6b7ad); box-shadow: 4px 4px var(--shadow,#07131b); }
+.elevator-console button { color: var(--ink,#f4efd9); border-color: var(--edge,#a6b7ad); }
+.elevator-console button:focus-visible { outline-color: var(--accent,#f6c978); }
+.elevator-sky { background: var(--office-scene-bg,#112735); }
+.elevator-in-office-world .elevator-stage { visibility: hidden; }
+.elevator-in-office-world .elevator-sky { opacity: 0 !important; }

@@ -125,8 +125,19 @@ try {
       await page.waitForURL(url => !url.searchParams.has('floor'));
       await page.waitForFunction(() => window.__source?.threads().length >= 6 && !document.body.classList.contains('shared-office')); 
       await page.locator('.elevator-overlay').waitFor({ state: 'detached' });
+      await page.evaluate(() => { window.__originalOfficeCanvas = document.getElementById('scene'); });
       await page.getByRole('button', { name: 'Building view', exact: true }).click();
       await page.locator('.building-world[data-rendered=true]').waitFor();
+      assert.equal(await page.evaluate(() => document.querySelector('.building-world #scene') === window.__originalOfficeCanvas), true);
+      await page.screenshot({ path: 'shots/building-original-style.png', timeout: 60000 });
+      const officeTime = await page.evaluate(() => window.__world.time);
+      await page.locator('.building-world [data-action=close]').click();
+      assert.equal(await page.evaluate(() => document.getElementById('scene') === window.__originalOfficeCanvas && document.getElementById('hud').parentElement === document.body), true);
+      await page.waitForFunction(t => window.__world.time > t, officeTime);
+      assert.equal(await page.evaluate(() => document.getElementById('scene').getContext('webgl2').isContextLost()), false);
+      await page.getByRole('button', { name: 'Building view', exact: true }).click();
+      await page.locator('.building-world[data-rendered=true]').waitFor();
+      await page.getByRole('button', { name: 'Floors', exact: true }).click();
       await page.locator('.building-world-directory button').nth(1).waitFor();
       await page.locator(`.building-world-directory [data-floor="${floorId}"]`).click();
       await page.getByRole('button', { name: 'Enter this office', exact: true }).click();
@@ -134,6 +145,14 @@ try {
       await page.locator('.elevator-overlay').waitFor({ state: 'detached' });
       await page.waitForFunction(() => window.__source?.threads().length === 8 && window.__ready);
       assert.equal(await page.locator('.building-world').count(), 0);
+      // Closing after a failed refresh must restore the shared office canvas too.
+      await page.route('**/api/building/floors', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"synthetic failure"}' }));
+      await page.getByRole('button', { name: 'Building view', exact: true }).click();
+      await page.getByText('Building unavailable.', { exact: false }).waitFor();
+      await page.locator('.building-world [data-action=close]').click();
+      assert.equal(await page.locator('#scene').isVisible(), true);
+      assert.equal(await page.evaluate(() => document.getElementById('scene').getContext('webgl2').isContextLost()), false);
+      await page.unrouteAll({ behavior: 'wait' });
       assert.deepEqual(errors, []);
     }
     console.log('PASS: isolated two-player preview, accepted invitation, changing synthetic agents, saved style, elevator, home and private API isolation.');

@@ -1,31 +1,37 @@
+/* Building mode uses the office canvas and its existing theme/HUD, like another camera view. */
 .building-world, .building-world * { box-sizing: border-box; }
-.building-world { position: fixed; inset: 0; z-index: 24000; display: grid; grid-template-columns: minmax(0, 1fr) 310px; grid-template-rows: auto minmax(0, 1fr); background: #172c35; color: #f2eddb; font: 16px 'Pixelify Sans', monospace; }
-.building-world > header { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 20px 28px; border-bottom: 2px solid #547067; background: #14272f; }
-.building-world header small { color: #b8c8b7; letter-spacing: 4px; font-size: 11px; }
-.building-world h1 { font-size: 34px; margin: 3px 0; font-weight: normal; }
-.building-world header p { font-size: 14px; margin: 5px 0 0; color: #b8c8b7; }
-.building-world nav { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
-.building-world button { font: inherit; cursor: pointer; color: inherit; border: 2px solid #839c8f; padding: 9px 12px; background: #203a40; }
-.building-world button:hover, .building-world button[aria-pressed=true] { color: #172c35; background: #e8cd91; border-color: #e8cd91; }
-.building-world button:focus-visible { outline: 3px solid #f6d38b; outline-offset: 3px; }
-.building-world-stage { position: relative; overflow: hidden; min-width: 0; min-height: 0; }
-.building-world-stage canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; touch-action: none; cursor: grab; }
+.building-world { position: fixed; inset: 0; z-index: 24000; color: var(--ink); font: 500 16px var(--font, 'Bitcount Prop Single'), monospace; }
+.building-world > header { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 4; width: max-content; max-width: calc(100vw - 32px); display: flex; align-items: center; gap: 18px; padding: 12px 16px; background: var(--paper); border: 2px solid var(--edge); box-shadow: 4px 4px var(--shadow); }
+.building-world header small { display: none; }
+.building-world h1 { font: 700 18px 'Pixelify Sans', monospace; margin: 0; white-space: nowrap; }
+.building-world header p { font-size: 12px; margin: 4px 0 0; max-width: 175px; color: var(--muted); }
+.building-world nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.building-world button { font: inherit; cursor: pointer; color: var(--ink); border: 2px solid var(--edge); padding: 7px 10px; background: var(--paper); }
+.building-world button:hover, .building-world button[aria-pressed=true] { color: var(--paper); background: var(--ink); }
+.building-world button:focus-visible { outline: 3px solid var(--accent, var(--ink)); outline-offset: 3px; }
+.building-world-stage { position: absolute; inset: 0; overflow: hidden; }
+.building-world-stage canvas { position: absolute !important; left: 0; top: 0; display: block; image-rendering: pixelated; touch-action: none; cursor: grab; }
 .building-world-labels { position: absolute; inset: 0; pointer-events: none; }
-.building-world-labels button { pointer-events: auto; position: absolute; width: 150px; transform: translateY(-50%); font-size: 13px; padding: 7px 9px; text-align: left; background: #14272fe8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.building-world-caption { position: absolute; bottom: 12px; left: 20px; margin: 0; font-size: 12px; color: #c3cfbd; pointer-events: none; }
-.building-world aside { overflow-y: auto; padding: 24px 20px; background: #f0ead9; color: #263d37; border-left: 3px solid #547067; }
-.building-world aside h2 { font-size: 23px; margin: 12px 0; font-weight: normal; }
-.building-world aside p { line-height: 1.6; font-size: 14px; margin: 10px 0; }
-.building-world-status { border-bottom: 2px solid #839c8f; padding-bottom: 16px; }
-.building-world-detail { border-bottom: 2px solid #839c8f; padding-bottom: 22px; margin-bottom: 20px; }
-.building-world-detail > small { display: block; margin-top: 18px; text-transform: uppercase; letter-spacing: 2px; font-size: 11px; }
-.building-world aside button { color: #263d37; background: transparent; }
-.building-world aside .building-world-enter { background: #263d37; color: #f0ead9; width: 100%; }
-.building-world-directory { display: grid; gap: 10px; margin-top: 18px; }
-.building-world-directory button { display: flex; align-items: center; gap: 12px; text-align: left; }
+.building-world-labels button { pointer-events: auto; position: absolute; width: 150px; transform: translateY(-50%); font-size: 13px; padding: 5px 8px; text-align: left; background: var(--tag-bg,var(--paper)); color: var(--tag-ink,var(--ink)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 2px solid var(--edge); box-shadow: 3px 3px var(--shadow); }
+.building-world-caption { position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%); padding: 4px 8px; background: var(--paper); margin: 0; font-size: 11px; color: var(--muted); pointer-events: none; white-space: nowrap; }
+.building-world aside { display: none; position: absolute; top: 28px; right: 28px; width: 310px; max-height: calc(100vh - 160px); overflow-y: auto; z-index: 3; padding: 18px; background: var(--paper); color: var(--ink); border: 3px solid var(--edge); box-shadow: 6px 6px var(--shadow); scrollbar-width: thin; }
+.building-world[data-controls-open=true] aside { display: block; }
+.building-world aside h2 { font: 700 20px 'Pixelify Sans',monospace; margin: 12px 0; }
+.building-world aside p { line-height: 1.5; font-size: 14px; margin: 10px 0; }
+.building-world-status { border-bottom: 2px solid var(--edge); padding-bottom: 12px; color: var(--muted); }
+.building-world-detail { border-bottom: 2px solid var(--edge); padding-bottom: 16px; margin-bottom: 16px; }
+.building-world-detail > small { display: block; margin-top: 14px; text-transform: uppercase; letter-spacing: 2px; font-size: 11px; }
+.building-world aside .building-world-enter { background: var(--ink); color: var(--paper); width: 100%; }
+.building-world-directory { display: grid; gap: 8px; margin-top: 14px; }
+.building-world-directory button { display: flex; align-items: center; gap: 10px; text-align: left; }
 .building-world-directory button > span { min-width: 25px; font-size: 12px; }
 .building-world-directory button div { min-width: 0; overflow-wrap: anywhere; }
-.building-world-directory b { font-weight: normal; }
+.building-world-directory b { font-weight: 500; }
 .building-world-directory small { display: block; margin-top: 6px; font-size: 12px; }
-@media(max-width:700px) { .building-world { grid-template-columns: 1fr; grid-template-rows: auto minmax(230px, 52%) minmax(0, 1fr); } .building-world > header { padding: 12px; gap: 12px; align-items: flex-start; } .building-world h1 { font-size: 26px; } .building-world header p { display:none; } .building-world nav { gap: 6px; max-width: 190px; } .building-world nav button { font-size: 12px; padding: 7px; } .building-world aside { border-left: 0; border-top: 2px solid #547067; padding: 12px 18px; } .building-world-labels button { width: 120px; font-size: 11px; } .building-world-caption { font-size: 10px; left: 12px; bottom: 6px; } }
 .building-world [hidden] { display: none !important; }
+body.building-view-open > #tags, body.building-view-open > #wall, body.building-view-open .office-building-launcher, body.building-view-open .office-home-launcher { visibility: hidden; pointer-events: none; }
+.building-world #hud .receipt, .building-world #hud .pulse, .building-world #hud .ticker { visibility: hidden; pointer-events: none; }
+.building-world[data-controls-open=true] #hud .deck { visibility: hidden; pointer-events: none; }
+@media(max-width:700px) { .building-world > header { bottom: 12px; width: calc(100vw - 24px); padding: 10px; gap: 8px; flex-direction: column; align-items: stretch; } .building-world header > div { display: flex; gap: 8px; align-items: center; } .building-world h1 { font-size: 16px; } .building-world header p { display: none; } .building-world nav { gap: 6px; justify-content: center; } .building-world nav button { font-size: 12px; padding: 7px; } .building-world aside { top: auto; bottom: 132px; right: 12px; left: 12px; width: auto; max-height: 45vh; padding: 12px; } .building-world-labels button { width: 120px; font-size: 11px; } .building-world-caption { display:none; } }
+.building-world-caption { display: none; }
+.building-world-invite { margin-top: 14px; width: 100%; }

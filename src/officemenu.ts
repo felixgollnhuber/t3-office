@@ -1,3 +1,4 @@
+import type { BuildingRenderHost } from './building-view';
 import { travelToFloor } from './elevator';
 import { readProfiles, saveProfile } from './character-profiles';
 import { isCharacterStyle, cleanCharacterStyle } from './character-style';
@@ -8,7 +9,7 @@ import { B } from './i18n/building';
 import type { AgentSource } from './source';
 import { settings } from './settings';
 
-export function installOfficeMenu(source: AgentSource, shared: boolean, selectCharacter?: (id: string) => void) {
+export function installOfficeMenu(source: AgentSource, shared: boolean, selectCharacter?: (id: string) => void, renderHost?: BuildingRenderHost) {
   let profiles = readProfiles();
   const original = new Map<string, string>();
   const apply = () => {
@@ -52,7 +53,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
   frame.src = url.href;
   dialog.append(frame); document.body.append(dialog);
   const buildingButton = document.createElement('button'); buildingButton.className = 'office-building-launcher'; buildingButton.textContent = B.buildingView;
-  buildingButton.addEventListener('click', () => { dialog.close(); void import('./building-view').then(({ openBuildingView }) => openBuildingView(() => dialog.showModal())); });
+  buildingButton.addEventListener('click', () => { window.dispatchEvent(new Event('office-building-open')); dialog.close(); void import('./building-view').then(({ openBuildingView }) => openBuildingView(() => dialog.showModal(), renderHost)); });
   document.body.append(buildingButton);
   if (new URLSearchParams(location.search).get('building') === '1') window.addEventListener('office-ready', () => { const next = new URL(location.href); next.searchParams.delete('building'); history.replaceState(null, '', next); buildingButton.click(); }, { once: true });
   button.addEventListener('click', () => dialog.showModal());
@@ -119,7 +120,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
     } else if (data.type === 'office-open-building') {
       dialog.close(); buildingButton.click();
     } else if (data.type === 'office-character-select' && !shared && typeof data.id === 'string') {
-      if (source.threads().some((t) => t.id === data.id)) { dialog.close(); selectCharacter?.(data.id); }
+      if (source.threads().some((t) => t.id === data.id)) { dialog.close(); window.dispatchEvent(new Event('office-building-close')); selectCharacter?.(data.id); }
     } else if (data.type === 'office-character-save' && !shared) {
       const t = source.threads().find((t) => t.id === data.id);
       if (!t || typeof data.name !== 'string' || !data.name.trim() || data.name.length > 32 || !WORK_AREAS.includes(data.area)) return;

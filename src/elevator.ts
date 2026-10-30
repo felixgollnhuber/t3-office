@@ -40,6 +40,7 @@ export async function travelToFloor(id: string | null) {
   active = true;
   const version = ++generation;
   const ui = overlay();
+  const fromWorld = document.body.classList.contains('building-view-open'); ui.root.classList.toggle('elevator-in-office-world', fromWorld);
   let skip = reduced(); let finishWait: (() => void) | undefined; let navigating = false;
   ui.root.classList.toggle('reduced-motion', skip);
   ui.button.onclick = () => { skip = true; ui.root.classList.add('reduced-motion'); finishWait?.(); };
@@ -55,7 +56,7 @@ export async function travelToFloor(id: string | null) {
     if (!skip) window.dispatchEvent(new Event('office-departure'));
     await pause(300); if (version !== generation) return ui.close();
     ui.root.dataset.phase = 'closing'; await pause(280); if (version !== generation) return ui.close();
-    ui.root.dataset.phase = 'moving'; ui.status.textContent = T.moving;
+    ui.root.dataset.phase = 'moving'; ui.status.textContent = T.moving; window.dispatchEvent(new CustomEvent('office-elevator-move', { detail: destination.id }));
     const started = performance.now();
     const counter = setInterval(() => { const progress = Math.min(1, (performance.now() - started) / 850); ui.root.querySelector('output')!.textContent = String(Math.round(steps.start + (steps.end - steps.start) * progress) + 1); }, 90);
     await pause(850); clearInterval(counter); if (version !== generation) return ui.close();
@@ -68,7 +69,7 @@ export async function travelToFloor(id: string | null) {
     const url = new URL(location.href); url.searchParams.delete('view');
     if (id) { url.searchParams.set('source', 'shared'); url.searchParams.set('floor', id); }
     else { url.searchParams.delete('source'); url.searchParams.delete('floor'); }
-    try { sessionStorage.setItem(KEY, JSON.stringify({ path: url.pathname + url.search, at: Date.now(), skip })); } catch { /* storage may be disabled */ }
+    try { sessionStorage.setItem(KEY, JSON.stringify({ path: url.pathname + url.search, at: Date.now(), skip, world: fromWorld })); } catch { /* storage may be disabled */ }
     navigating = true; location.assign(url);
   } catch {
     if (version !== generation) return ui.close();
@@ -82,7 +83,7 @@ export function resumeArrival() {
   let ticket;
   try { ticket = JSON.parse(sessionStorage.getItem(KEY) ?? 'null'); sessionStorage.removeItem(KEY); } catch { return; }
   if (!ticket || ticket.path !== location.pathname + location.search || typeof ticket.at !== 'number' || Date.now() - ticket.at > 30000 || Date.now() < ticket.at) return;
-  active = true; const ui = overlay();
+  active = true; const ui = overlay(); ui.root.classList.toggle('elevator-in-office-world', !!ticket.world);
   ui.root.dataset.phase = 'arrival-loading'; ui.root.classList.toggle('reduced-motion', !!ticket.skip || reduced());
   ui.status.textContent = T.loading;
   let ready = false; let skipped = !!ticket.skip || reduced(); let timer: ReturnType<typeof setTimeout> | undefined;

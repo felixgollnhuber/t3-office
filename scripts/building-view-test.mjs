@@ -16,7 +16,7 @@ try{
  for(const[ctx,scope]of[[friend,'activity'],[presence,'presence']]){const i=await call(ctx,'/invites',{scope});await call(owner,'/accept',{token:i.token});}
  const page=await owner.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`${base}?harness=1`);await page.locator('#open').click();await page.locator('.building-world[data-rendered=true]').waitFor();
- await page.locator('.building-world-directory button').nth(2).waitFor();assert.equal(await page.getByText('secret_person',{exact:false}).count(),0);
+ await page.getByRole('button',{name:'Floors',exact:true}).click(); await page.locator('.building-world-directory button').nth(2).waitFor();assert.equal(await page.getByText('secret_person',{exact:false}).count(),0);
  assert.equal(await page.evaluate(id=>window.__buildingView.models.children.find(g=>g.userData.floorId===id).children.length,quiet.office.id),4,'Presence floor is a solid private volume, without desks or agents');
  await page.waitForTimeout(200);await mkdir('shots',{recursive:true});await page.screenshot({path:'shots/building-world.png',timeout:60000});
  // Project a real front-edge mesh point and click the actual WebGL canvas, not a mock selection hook.
@@ -25,12 +25,13 @@ try{
  assert.ok(await page.locator('.building-world-detail').innerText().then(t=>t.includes('Maya creative studio')&&t.includes('2 coworkers')));
  await page.waitForTimeout(200);await page.screenshot({path:'shots/building-floor-focus.png',timeout:60000});
  await page.getByRole('button',{name:'Whole building',exact:true}).click();assert.equal(await page.locator('.building-world').getAttribute('data-selected-floor'),'');
- await page.setViewportSize({width:390,height:844});await page.locator(`.building-world-directory [data-floor="${quiet.office.id}"]`).click();
+ await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Floors',exact:true}).click();await page.locator(`.building-world-directory [data-floor="${quiet.office.id}"]`).click();
  assert.equal(await page.locator('.building-world').evaluate(el=>el.scrollWidth<=innerWidth),true);
  assert.ok((await page.locator('.building-world-detail').innerText()).includes('Presence only'));assert.equal((await page.locator('.building-world-detail').innerText()).includes('coworkers'),false);
  await page.screenshot({path:'shots/building-world-mobile.png',timeout:60000});
  await page.locator(`.building-world-directory [data-floor="${maya.office.id}"]`).click();const grants=await call(friend,'/grants');await call(friend,`/grants/${grants.grants[0].id}`,{},'DELETE');
  await page.locator(`.building-world-directory [data-floor="${maya.office.id}"]`).waitFor({state:'detached',timeout:12000});assert.equal((await page.locator('.building-world-detail').innerText()).includes('Maya'),false);
+ if (await page.locator('.building-world').getAttribute('data-controls-open') !== 'true') await page.getByRole('button',{name:'Floors',exact:true}).click();
  await page.route('**/api/building/floors',route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"synthetic outage"}'}));
  await page.getByText('Building unavailable.',{exact:false}).waitFor({timeout:12000});assert.equal(await page.locator('.building-world canvas').isVisible(),false);assert.equal(await page.locator('.building-world-labels button').count(),0);
  await page.unrouteAll({behavior:'wait'});await page.getByRole('button',{name:'Try again',exact:true}).click();await page.locator('.building-world-directory button').nth(1).waitFor();

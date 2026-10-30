@@ -102,8 +102,12 @@ async function main() {
   let hud: Hud | undefined;
   const player = new Player(sfx, () => hud!.ytHost());
   const world = new World(office, theme, source, cycle, sfx, player, weather);
-  hud = new Hud(theme, sfx, clock, source, player, weather, () => menu.open());
-  installOfficeMenu(source, shared, (id) => focusAgent(id));
+  hud = new Hud(theme, sfx, clock, source, player, weather, () => { window.dispatchEvent(new Event('office-building-close')); menu.open(); });
+  installOfficeMenu(source, shared, (id) => focusAgent(id), {
+    canvas, theme,
+    render: (scene, camera) => pipe.render(scene, camera),
+    sync: (scene, sun, hemi) => { scene.background = office.scene.background; scene.fog = office.scene.fog; sun.color.copy(office.sun.color); sun.intensity = office.sun.intensity; sun.position.copy(office.sun.position); hemi.color.copy(office.hemi.color); hemi.groundColor.copy(office.hemi.groundColor); hemi.intensity = office.hemi.intensity; if (scene.background instanceof THREE.Color) document.documentElement.style.setProperty('--office-scene-bg', `#${scene.background.getHexString()}`); },
+  });
   const wall = new QuotaWall(office, usage, () => focusOn(spots[0]));
   if (t3) wall.live = 'live · T3';
   const board = new BoardSource(t3 ? 'live' : 'demo');
@@ -433,6 +437,7 @@ async function main() {
   const repeatOf = (ev: MouseEvent) => (lastClick && performance.now() - lastClick.t < 500 && Math.hypot(ev.clientX - lastClick.x, ev.clientY - lastClick.y) < 12 ? lastClick.p : null);
   window.addEventListener('contextmenu', (ev) => ev.preventDefault());
   window.addEventListener('pointerdown', (ev) => {
+    if (document.body.classList.contains('building-view-open')) return;
     sfx.unlock();
     const el = ev.target as HTMLElement;
     const again = repeatOf(ev);
@@ -464,6 +469,7 @@ async function main() {
     Object.assign(goal, { ...HOME, px: 0, py: 0 });
     zoomTarget = 1;
   };
+  window.addEventListener('office-building-open', () => closeFocus(true));
   window.addEventListener('office-departure', () => { closeFocus(true); zoomTarget = 1.6; });
   window.addEventListener('office-travel-cancel', homeView);
   window.addEventListener('office-arrival-start', () => { zoomF = 1.45; zoomTarget = 1; });
@@ -565,6 +571,7 @@ async function main() {
     hintEl.style.transform = `translate(${Math.max(4, Math.min(x + 14, window.innerWidth - hintEl.offsetWidth - 8))}px, ${Math.min(y + 12, window.innerHeight - hintEl.offsetHeight - 8)}px)`;
   };
   window.addEventListener('pointermove', (ev) => {
+    if (document.body.classList.contains('building-view-open')) return;
     if (!drag && !fly.spot && ev.timeStamp - hoverT > 30) {
       hoverT = ev.timeStamp;
       const el = ev.target as HTMLElement;
@@ -685,7 +692,12 @@ async function main() {
     const t = performance.now();
     const dt = Math.min(0.05, (t - last) / 1000);
     last = t;
-    if (document.body.classList.contains('building-view-open')) { source.update(dt); requestAnimationFrame(loop); return; }
+    if (document.body.classList.contains('building-view-open')) {
+      source.update(dt); const now = clock.now(); weather.update(dt, now.getHours());
+      Object.assign(cycle.weather, { cloud: weather.cloud, rain: weather.rain, snow: weather.snow, flash: weather.flash }); cycle.update(now);
+      if ((hudT += dt) > .25) { hud!.update(hudT, now, world, source, cycle); hudT = 0; }
+      requestAnimationFrame(loop); return;
+    }
     const now = clock.now();
 
     director.update(dt);
