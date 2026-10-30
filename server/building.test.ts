@@ -445,3 +445,57 @@ test('social mutation intent cannot transfer to a different signed-in account', 
     assert.equal((await f.request('/moments','POST',{title:'Approved by Bobby',kind:'milestone',actorId:b.user.id},b.client)).status,201);
   } finally { await f.close(); }
 });
+
+test('personal floor choices persist, sanitize extras and respect activity scope', async () => {
+ const f=await fixture();try{
+  const owner=await f.register('decor_owner'),guest=await f.register('decor_guest'),presence=await f.register('decor_presence');
+  await grant(f,owner,guest,'activity');await grant(f,owner,presence,'presence');
+  const appearance={theme:'loft',layout:'original',lighting:'warm',identity:{accent:'rose',emblem:'leaf',slots:{west:'plant',center:'books',east:'lamp'},privateText:'must-drop'},privatePath:'must-drop'};
+  const saved=await f.request('/office','POST',{appearance},owner.client);assert.equal(saved.status,200);assert.equal(saved.data.office.appearance.identity.accent,'rose');assert.equal(JSON.stringify(saved.data).includes('must-drop'),false);
+  assert.equal((await f.request('/offices/'+owner.office.id,'GET',undefined,guest.client)).data.office.appearance.identity.slots.center,'books');
+  assert.equal('appearance'in(await f.request('/offices/'+owner.office.id,'GET',undefined,presence.client)).data.office,false);
+  assert.equal((await f.request('/office','POST',{appearance:{...appearance,identity:{...appearance.identity,accent:'https://example.invalid/private'}}},owner.client)).status,400);
+  assert.equal((await f.request('/office','POST',{appearance:{...appearance,identity:{...appearance.identity,slots:{west:'arbitrary-url',center:'none',east:'none'}}}},owner.client)).status,400);
+  await f.restart();assert.equal((await f.request('/session','GET',undefined,owner.client)).data.office.appearance.identity.emblem,'leaf');
+ }finally{await f.close();}
+});
+
+test('doorbell requires opt-in, approval and current grants; DND, cooldown, expiry and privacy hold', async()=>{
+ const f=await fixture();try{
+  const host=await f.register('bell_host'),guest=await f.register('bell_guest'),stranger=await f.register('bell_stranger');await grant(f,host,guest,'presence');
+  const focus=(await f.request('/focus','POST',{minutes:25,quiet:true},host.client)).data;
+  assert.equal((await f.request('/doorbell','GET',undefined,host.client)).data.enabled,false);
+  assert.equal((await f.request('/doorbell','POST',{sessionId:focus.id,quiet:true},guest.client)).status,409);
+  assert.equal((await f.request('/doorbell/settings','POST',{enabled:true,dnd:false},host.client)).status,200);
+  assert.equal((await f.request(`/focus/${focus.id}/join`,'POST',{quiet:true},guest.client)).status,403,'Direct join cannot bypass approval');
+  assert.equal((await f.request('/doorbell','POST',{sessionId:focus.id,quiet:true},stranger.client)).status,404);
+  const ring=await f.request('/doorbell','POST',{sessionId:focus.id,quiet:false,actorId:guest.user.id},guest.client);assert.equal(ring.status,201);
+  assert.equal((await f.request('/doorbell','GET',undefined,stranger.client)).data.incoming.length,0);
+  assert.equal((await f.request('/doorbell','GET',undefined,host.client)).data.incoming[0].requesterName,guest.user.name);
+  assert.equal((await f.request('/doorbell/'+ring.data.id+'/accept','POST',{},guest.client)).status,404);
+  assert.equal((await f.request('/doorbell/'+ring.data.id+'/accept','POST',{},host.client)).status,200);
+  assert.equal((await f.request('/social','GET',undefined,guest.client)).data.sessions[0].joined,true);
+  assert.equal((await f.request('/offices/'+host.office.id,'GET',undefined,guest.client)).data.agents.length,0,'Approval does not upgrade presence scope');
+  await f.request(`/focus/${focus.id}/leave`,'POST',{},guest.client);
+  await f.request('/doorbell/'+ring.data.id,'DELETE',{},guest.client);
+  assert.equal((await f.request('/doorbell','POST',{sessionId:focus.id,quiet:true},guest.client)).status,429,'Cancel cannot bypass cooldown');
+  f.advance(60_001);const second=(await f.request('/doorbell','POST',{sessionId:focus.id,quiet:true},guest.client)).data;
+  await f.request('/doorbell/settings','POST',{enabled:true,dnd:true},host.client);
+  assert.equal((await f.request('/doorbell','GET',undefined,host.client)).data.incoming.length,0);
+  assert.equal((await f.request('/doorbell/'+second.id+'/accept','POST',{},host.client)).status,409);
+  assert.equal((await f.request('/doorbell','POST',{sessionId:focus.id,quiet:true},guest.client)).status,409);
+  await f.request('/doorbell/settings','POST',{enabled:true,dnd:false},host.client);f.advance(60_001);
+  const expired=(await f.request('/doorbell','POST',{sessionId:focus.id,quiet:true},guest.client)).data;
+  f.advance(120_001);assert.equal((await f.request('/doorbell/'+expired.id+'/accept','POST',{},host.client)).status,404);
+  const revoke=(await f.request('/doorbell','POST',{sessionId:focus.id,quiet:true},guest.client)).data;
+  const access=(await f.request('/grants','GET',undefined,host.client)).data.grants[0];await f.request('/grants/'+access.id,'DELETE',{},host.client);
+  assert.equal((await f.request('/doorbell/'+revoke.id+'/accept','POST',{},host.client)).status,404);
+  const key=(await f.request('/publisher-tokens','POST',{},host.client)).data.token;
+  assert.equal((await f.request('/doorbell','GET',undefined,{}, {authorization:`Bearer ${key}`})).status,401);
+  assert.equal((await f.request('/doorbell/settings','POST',{enabled:true,dnd:false,actorId:guest.user.id},host.client)).status,409);
+  await grant(f,host,guest,'presence');
+  await f.request('/doorbell/settings','POST',{enabled:false,dnd:true},host.client);
+  assert.equal((await f.request(`/focus/${focus.id}/join`,'POST',{quiet:true},guest.client)).status,403,'DND blocks new focus members even with ringing off');
+  await f.restart();assert.equal((await f.request('/doorbell','GET',undefined,host.client)).data.dnd,true);
+ }finally{await f.close();}
+});

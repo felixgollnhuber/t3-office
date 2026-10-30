@@ -11,7 +11,7 @@ try{
  const call=async(ctx,path,body,method=body===undefined?'GET':'POST')=>{const r=await ctx.request.fetch(`${base}api/building${path}`,{method,data:body});assert.equal(r.ok(),true,`${path}:${r.status()}`);return r.json();};
  const register=(ctx,handle)=>call(ctx,'/register',{handle,name:handle,password:'synthetic-test-password'});
  await register(owner,'you_demo');const maya=await register(friend,'maya_demo'),quiet=await register(presence,'presence_demo');await register(stranger,'secret_person');
- await call(friend,'/office',{name:'Maya creative studio',appearance:{theme:'loft',layout:'lounge',lighting:'warm'}});
+ await call(friend,'/office',{name:'Maya creative studio',appearance:{theme:'loft',layout:'lounge',lighting:'warm',identity:{accent:'rose',emblem:'leaf',slots:{west:'books',center:'lamp',east:'plant'}}}});
  await call(friend,'/publish',{agents:[{id:'demo-1',provider:'codex',status:'running'},{id:'demo-2',provider:'claude',status:'waiting'}]});
  for(const[ctx,scope]of[[friend,'activity'],[presence,'presence']]){const i=await call(ctx,'/invites',{scope});await call(owner,'/accept',{token:i.token});}
  await call(friend,'/moments',{title:'A small synthetic win',kind:'shipped'});
@@ -19,6 +19,7 @@ try{
  const page=await owner.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`${base}?harness=1`);await page.locator('#open').click();await page.locator('.building-world[data-rendered=true]').waitFor();
  await page.getByRole('button',{name:'Floors',exact:true}).click(); await page.locator('.building-world-directory button').nth(2).waitFor();assert.equal(await page.getByText('secret_person',{exact:false}).count(),0);
+ assert.equal(await page.evaluate(id=>window.__buildingView.models.children.find(g=>g.userData.floorId===id).getObjectByName('personal-floor').userData.identity.accent,maya.office.id),'rose');
  assert.equal(await page.evaluate(id=>window.__buildingView.models.children.find(g=>g.userData.floorId===id).children.length,quiet.office.id),4,'Presence floor is a solid private volume, without desks or agents');
  await page.waitForTimeout(200);await mkdir('shots',{recursive:true});await page.screenshot({path:'shots/building-world.png',timeout:60000});
  // Project a real front-edge mesh point and click the actual WebGL canvas, not a mock selection hook.

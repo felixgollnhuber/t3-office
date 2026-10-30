@@ -21,6 +21,8 @@ let floorId = '';
 let interval;
 let browser;
 let stopping = false;
+let doorbellDemo = false;
+let prepareDoorbell = async () => {};
 const banner = `<script type="module">
 import { travelToFloor } from "/src/elevator.ts";
 if (window === parent) {
@@ -29,11 +31,13 @@ if (window === parent) {
  const label = document.createElement('span'); label.textContent = location.search.includes('source=shared') ? 'SIMULATION · Visiting Maya’s office' : 'SIMULATION · Your office · no real activity';
  const visit = document.createElement('a'); visit.href='/preview/visit'; visit.textContent='Visit Maya';
  const tour = document.createElement('a'); tour.href='/preview/tour'; tour.textContent='30-second tour';
+ const bell = document.createElement('a'); bell.href='/preview/doorbell'; bell.textContent='Simulate a doorbell';
+ if(new URLSearchParams(location.search).has('doorbell'))label.textContent='SIMULATION · Maya automatically accepts demo rings';
  const home = document.createElement('a'); home.href='/preview/start'; home.textContent='Your demo office';
  visit.addEventListener('click', event => { event.preventDefault(); void travelToFloor(__DEMO_FLOOR__); });
  home.addEventListener('click', event => { event.preventDefault(); void travelToFloor(null); });
- for (const a of [visit,home,tour]) a.style.color='#263a34';
- bar.append(label,visit,home,tour); document.body.append(bar);
+ for (const a of [visit,home,tour,bell]) a.style.color='#263a34';
+ bar.append(label,visit,home,tour,bell); document.body.append(bar);
 }
 </script>`;
 const server = await createServer({
@@ -47,10 +51,11 @@ const server = await createServer({
         res.statusCode = 302; res.setHeader('Location', `http://127.0.0.1:${address.port}${req.url?.startsWith('/') ? req.url : '/'}`); res.end(); return;
       }
       const path = (req.url ?? '').split('?')[0];
-      if (!['/preview/start', '/preview/visit', '/preview/building', '/preview/tour'].includes(path)) return next();
+      if (!['/preview/start', '/preview/visit', '/preview/building', '/preview/tour', '/preview/doorbell'].includes(path)) return next();
       if (req.method !== 'GET') { res.statusCode = 405; res.end(); return; }
       res.setHeader('Cache-Control', 'no-store');
       if (!visitorCookie) { res.statusCode = 503; res.end('Preparing synthetic building…'); return; }
+      if(path==='/preview/doorbell'){void prepareDoorbell().then(()=>{res.setHeader('Set-Cookie',`${visitorCookie}; Path=/; HttpOnly; SameSite=Strict`);res.statusCode=302;res.setHeader('Location','/?source=demo&agents=6&weather=clear&doorbell=1');res.end();}).catch(()=>{res.statusCode=503;res.end('Synthetic doorbell unavailable.');});return;}
       // Automatic sign-in is deliberately confined to this disposable demo server.
       res.setHeader('Set-Cookie', `${visitorCookie}; Path=/; HttpOnly; SameSite=Strict`);
       res.statusCode = 302;
@@ -80,7 +85,7 @@ try {
   const friend = await create('maya_demo', 'Maya (simulated)');
   const visitor = await create('you_demo', 'You (simulated)');
   visitorCookie = visitor.cookie; floorId = friend.data.office.id;
-  await call('/office', { name: 'Maya’s creative studio · simulation', appearance: { theme: 'loft', layout: 'lounge', lighting: 'warm' } }, friend.cookie);
+  await call('/office', { name: 'Maya’s creative studio · simulation', appearance: { theme: 'loft', layout: 'lounge', lighting: 'warm',identity:{accent:'amber',emblem:'star',slots:{west:'plant',center:'books',east:'lamp'}} } }, friend.cookie);
   await call('/office', { name: 'Your demo office' }, visitor.cookie);
   const invite = await call('/invites', { scope: 'activity' }, friend.cookie);
   await call('/accept', { token: invite.data.token }, visitor.cookie);
@@ -89,6 +94,7 @@ try {
   await call('/accept', { token: reciprocal.data.token }, friend.cookie);
   await call('/focus', { minutes: 25, quiet: true }, friend.cookie);
   await call('/moments', { title: 'Our first shared office is ready · simulation', kind: 'milestone' }, friend.cookie);
+  prepareDoorbell = async () => { await call('/doorbell/settings',{enabled:true,dnd:false},friend.cookie);const social=await call('/social',undefined,friend.cookie);if(!social.data.sessions.some(s=>s.isHost))await call('/focus',{minutes:25,quiet:true},friend.cookie);doorbellDemo=true; };
   const names = ['Nova', 'Pixel', 'Echo', 'Atlas', 'Quinn', 'Rui', 'Sage', 'Orbit'];
   const areas = ['design', 'design', 'frontend', 'frontend', 'backend', 'backend', 'testing', 'research'];
   const statuses = ['running', 'running', 'waiting', 'idle'];
@@ -123,6 +129,7 @@ try {
       await page.waitForFunction(() => window.__source?.threads().length === 8);
       assert.equal(await page.locator('#friend-preview-banner').isVisible(), true);
       assert.equal(await page.locator('body').getAttribute('data-office-theme'), 'loft');
+      assert.equal(await page.evaluate(()=>window.__office.scene.getObjectByName('personal-floor').userData.identity.accent),'amber');
       await page.getByRole('button', { name: 'Friends & characters', exact: true }).click();
       const menu = page.frameLocator('.office-friends-dialog iframe');
       await menu.locator('#floor-list .floor').nth(1).waitFor();
@@ -132,6 +139,19 @@ try {
       await page.waitForURL(url => !url.searchParams.has('floor'));
       await page.waitForFunction(() => window.__source?.threads().length >= 6 && !document.body.classList.contains('shared-office')); 
       await page.locator('.elevator-overlay').waitFor({ state: 'detached' });
+      await page.getByRole('button', { name: 'Friends & characters', exact: true }).click();
+      await menu.getByRole('button', { name: 'Office style', exact: true }).click();
+      await menu.locator('#style-form select[name=accent]').selectOption('rose');
+      await menu.locator('#style-form select[name=emblem]').selectOption('leaf');
+      await menu.locator('#style-form select[name=west]').selectOption('books');
+      await menu.locator('#style-form select[name=center]').selectOption('plant');
+      await menu.locator('#style-form select[name=east]').selectOption('lamp');
+      await page.screenshot({path:'shots/personal-floor-settings.png',timeout:60000});
+      await menu.locator('#style-form button[type=submit]').click();
+      await page.waitForFunction(()=>window.__ready&&JSON.parse(document.body.dataset.floorIdentity??'null')?.accent==='rose');
+      assert.equal((await call('/session',undefined,visitorCookie)).data.office.appearance.identity.emblem,'leaf');
+      assert.equal(await page.evaluate(()=>window.__office.scene.getObjectByName('personal-floor').userData.identity.slots.west),'books');
+      await page.screenshot({path:'shots/personal-own-office.png',timeout:60000});
       await page.evaluate(() => { window.__originalOfficeCanvas = document.getElementById('scene'); });
       await page.getByRole('button', { name: 'Building view', exact: true }).click();
       await page.locator('.building-world[data-rendered=true]').waitFor();
@@ -160,6 +180,12 @@ try {
       assert.equal(await page.locator('#scene').isVisible(), true);
       assert.equal(await page.evaluate(() => document.getElementById('scene').getContext('webgl2').isContextLost()), false);
       await page.unrouteAll({ behavior: 'wait' });
+      await page.goto(`${base}preview/doorbell`);await page.locator('.doorbell-office[open] [data-ring-session]').waitFor();
+      await page.locator('[data-ring-session]').click();await page.locator('[data-outgoing]').waitFor();
+      const waiting=(await call('/doorbell',undefined,friend.cookie)).data.incoming[0];assert.ok(waiting);
+      await call(`/doorbell/${waiting.id}/accept`,{},friend.cookie);
+      await page.getByText('Accepted',{exact:true}).waitFor({timeout:12000});await page.locator('.social-focus-badge').waitFor();
+      await page.screenshot({path:'shots/doorbell-real-office.png',timeout:60000});
       assert.deepEqual(errors, []);
     }
     if (tourCheck) {
@@ -216,7 +242,7 @@ try {
     await stop();
   } else {
     let busy = false;
-    interval = setInterval(async () => { if (busy) return; busy = true; try { step++; await publish(); } catch (e) { console.error('Simulation paused:', e.message); clearInterval(interval); } finally { busy = false; } }, 8000);
-    console.log(`Guided first tour: ${base}preview/tour\nWhole building: ${base}preview/building\nYour demo office: ${base}preview/start\nVisit Maya: ${base}preview/visit\nDisposable synthetic building only. Ctrl+C stops it and removes its temporary database.`);
+    interval = setInterval(async () => { if (busy) return; busy = true; try { step++; await publish(); if(doorbellDemo){const rings=(await call('/doorbell',undefined,friend.cookie)).data.incoming;for(const r of rings)await call(`/doorbell/${r.id}/accept`,{},friend.cookie).catch(()=>{});} } catch (e) { console.error('Simulation paused:', e.message); clearInterval(interval); } finally { busy = false; } }, 8000);
+    console.log(`Simulated doorbell: ${base}preview/doorbell\nGuided first tour: ${base}preview/tour\nWhole building: ${base}preview/building\nYour demo office: ${base}preview/start\nVisit Maya: ${base}preview/visit\nDisposable synthetic building only. Ctrl+C stops it and removes its temporary database.`);
   }
 } catch (error) { await stop(); throw error; }

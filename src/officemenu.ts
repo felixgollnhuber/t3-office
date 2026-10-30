@@ -18,6 +18,11 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
     social ??= import('./social').then(({ installSocialOffice }) => installSocialOffice());
     (await social).open(tab);
   };
+  let bell: Promise<{open():void}> | undefined;
+  const openBell = async () => {dialog.close();window.dispatchEvent(new Event('office-building-close'));bell??=import('./doorbell').then(m=>m.installDoorbell());(await bell).open();};
+  window.addEventListener('office-open-doorbell',()=>{void openBell();});
+  window.addEventListener('office-focus-updated',()=>{social??=import('./social').then(m=>m.installSocialOffice());void social.then(()=>document.querySelector('.social-office')?.dispatchEvent(new Event('social-resume')));});
+  if(sessionStorage.getItem('office.doorbell-active.v1')==='1')bell=import('./doorbell').then(m=>m.installDoorbell());
   let profiles = readProfiles();
   const original = new Map<string, string>();
   const apply = () => {
@@ -119,7 +124,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
     if (!data || typeof data !== 'object') return;
     if (data.type === 'office-menu-ready' || data.type === 'office-characters-request') {
       let appearance; try { appearance = JSON.parse(localStorage.getItem('office.appearance.v1') ?? 'null'); } catch { /* defaults */ }
-      send({ type: 'office-appearance-state', appearance: { theme: settings.get('theme'), layout: isAppearance(appearance) ? appearance.layout : 'original', lighting: isAppearance(appearance) ? appearance.lighting : 'original' } });
+      send({ type: 'office-appearance-state', appearance: { theme: settings.get('theme'), layout: isAppearance(appearance) ? appearance.layout : 'original', lighting: isAppearance(appearance) ? appearance.lighting : 'original', ...(isAppearance(appearance) && appearance.identity ? { identity:appearance.identity } : {}) } });
       send({ type: 'office-current-floor', id: shared ? new URLSearchParams(location.search).get('floor') : null });
       apply(); send({ type: 'office-local-characters', characters: shared ? [] : localCharacters(), local: !shared });
       send({ type: 'office-sharing-state', sharing: !!publishing, pending });
@@ -127,6 +132,8 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
       localStorage.setItem('office.appearance.v1', JSON.stringify(data.appearance));
       if (settings.get('theme') !== data.appearance.theme) { settings.set('theme', data.appearance.theme); return; }
       const next = new URL(location.href); next.searchParams.delete('theme'); location.assign(next);
+    } else if (data.type === 'office-open-doorbell') {
+      void openBell();
     } else if (data.type === 'office-open-social') {
       void openSocial(data.tab === 'moments' ? 'moments' : 'focus');
     } else if (data.type === 'office-start-tour') {
@@ -158,7 +165,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
           if (generation !== publisherGeneration) return;
           ownerId = session.user.id; sentProfiles.clear();
           let storedAppearance; try { storedAppearance = JSON.parse(localStorage.getItem('office.appearance.v1') ?? 'null'); } catch { /* defaults */ }
-          await api('/office', 'POST', { paused: false, appearance: { theme: settings.get('theme'), layout: isAppearance(storedAppearance) ? storedAppearance.layout : 'original', lighting: isAppearance(storedAppearance) ? storedAppearance.lighting : 'original' } });
+          await api('/office', 'POST', { paused: false, appearance: { theme: settings.get('theme'), layout: isAppearance(storedAppearance) ? storedAppearance.layout : 'original', lighting: isAppearance(storedAppearance) ? storedAppearance.lighting : 'original', ...(isAppearance(storedAppearance) && storedAppearance.identity ? {identity:storedAppearance.identity} : {}) } });
           if (generation !== publisherGeneration) return;
           clearInterval(publishing);
           publishing = setInterval(() => { void publish(); }, 10_000);
@@ -179,6 +186,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
   if (invite) dialog.showModal();
   // A hint contains no identity or content; the service must revalidate before showing the timer.
   if (sessionStorage.getItem('office.focus-active.v1') === '1') { social ??= import('./social').then(({ installSocialOffice }) => installSocialOffice()); }
+  if(new URLSearchParams(location.search).get('doorbell')==='1')window.addEventListener('office-ready',()=>{void openBell();},{once:true});
   const initialSocial = new URLSearchParams(location.search).get('social');
   if (initialSocial) window.addEventListener('office-ready', () => { void openSocial(initialSocial === 'moments' ? 'moments' : 'focus'); }, { once: true });
 }

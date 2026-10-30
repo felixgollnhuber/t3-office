@@ -1,5 +1,5 @@
 import { isCharacterStyle, cleanCharacterStyle } from '../src/character-style.ts';
-import { DEFAULT_APPEARANCE, isAppearance } from '../src/appearance.ts';
+import { DEFAULT_APPEARANCE, isAppearance, cleanAppearance } from '../src/appearance.ts';
 /** Consent-based building API. It stores only accounts, grants and explicitly published status snapshots, never local T3 data. */
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
@@ -79,6 +79,11 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
     CREATE INDEX IF NOT EXISTS focus_members_user ON focus_members(user);
     CREATE TABLE IF NOT EXISTS moments(id TEXT PRIMARY KEY, office TEXT NOT NULL REFERENCES offices(id), title TEXT NOT NULL, kind TEXT NOT NULL, created INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS moments_office_created ON moments(office,created);
+    CREATE TABLE IF NOT EXISTS doorbell_prefs(user TEXT PRIMARY KEY REFERENCES users(id),enabled INTEGER NOT NULL,dnd INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS doorbell_requests(id TEXT PRIMARY KEY,requester TEXT NOT NULL REFERENCES users(id),host TEXT NOT NULL REFERENCES users(id),session TEXT NOT NULL REFERENCES focus_sessions(id) ON DELETE CASCADE,quiet INTEGER NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,status TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS doorbell_session ON doorbell_requests(session);
+    CREATE TABLE IF NOT EXISTS doorbell_cooldown(requester TEXT NOT NULL,host TEXT NOT NULL,last INTEGER NOT NULL,PRIMARY KEY(requester,host));
+
 
   `);
   const one = (sql: string, ...values: (string | number)[]) => db.prepare(sql).get(...values) as Row | undefined;
@@ -148,9 +153,12 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
     const selected = one('SELECT owner FROM offices WHERE id=?', officeId);
     return selected?.owner === user.id ? 'owner' : one('SELECT scope FROM grants WHERE office=? AND user=?', officeId, user.id)?.scope;
   };
+  const doorbellPref = (id:string) => {const r=one('SELECT enabled,dnd FROM doorbell_prefs WHERE user=?',id);return {enabled:!!r?.enabled,dnd:!!r?.dnd};};
   const pruneSocial = () => {
     run('DELETE FROM focus_sessions WHERE ends<=?', now());
+    run('DELETE FROM doorbell_cooldown WHERE last<?',now()-DAY);
     run('DELETE FROM moments WHERE created<?', now() - 7 * DAY);
+    run('DELETE FROM doorbell_requests WHERE expires<=? OR NOT EXISTS(SELECT 1 FROM focus_sessions f JOIN grants g ON g.office=f.office WHERE f.id=doorbell_requests.session AND g.user=doorbell_requests.requester)',now());
   };
   const focus = (row: Row, user: User) => {
     const officeId = String(row.office);
@@ -158,7 +166,8 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
     const host = one('SELECT o.name AS officeName,u.id AS hostId,u.name AS hostName FROM offices o JOIN users u ON u.id=o.owner WHERE o.id=?', officeId)!;
     const isHost = host.hostId === user.id;
     const joined = members.some(m => m.userId === user.id);
-    return { id: row.id, officeId, officeName: host.officeName, hostId: host.hostId, hostName: host.hostName, startedAt: row.started, endsAt: row.ends, participantCount: members.length, participants: isHost || joined ? members.map(m => ({ userId: m.userId, name: m.name, quiet: !!m.quiet })) : [], isHost, joined };
+    const bell = doorbellPref(String(host.hostId));
+    return { doorbell:bell.dnd ? 'dnd' : bell.enabled ? 'approval' : 'open', id: row.id, officeId, officeName: host.officeName, hostId: host.hostId, hostName: host.hostName, startedAt: row.started, endsAt: row.ends, participantCount: members.length, participants: isHost || joined ? members.map(m => ({ userId: m.userId, name: m.name, quiet: !!m.quiet })) : [], isHost, joined };
   };
   const moment = (row: Row, user: User) => {
     const owner = one('SELECT o.name AS officeName,u.id AS ownerId,u.name AS ownerName FROM offices o JOIN users u ON u.id=o.owner WHERE o.id=?', String(row.office))!;
@@ -247,11 +256,53 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
       };
       const office = ownOffice(user);
       if (match('/session', ['GET'])) return reply(200, session(user));
+      if (route.startsWith('/doorbell')) pruneSocial();
       if (route === '/social' || route === '/focus' || route.startsWith('/focus/') || route === '/moments' || route.startsWith('/moments/')) pruneSocial();
       if (match('/social', ['GET'])) {
         const sessions = all(`SELECT f.* FROM focus_sessions f JOIN offices o ON o.id=f.office WHERE o.owner=? OR EXISTS(SELECT 1 FROM grants g WHERE g.office=o.id AND g.user=?) ORDER BY f.started DESC`, user.id, user.id);
         const moments = all(`SELECT m.* FROM moments m JOIN offices o ON o.id=m.office WHERE o.owner=? OR EXISTS(SELECT 1 FROM grants g WHERE g.office=o.id AND g.user=? AND g.scope='activity') ORDER BY m.created DESC,m.id DESC LIMIT 20`, user.id, user.id);
         return reply(200, { viewerId: user.id, serverNow: now(), sessions: sessions.map(r => focus(r, user)), moments: moments.map(r => moment(r, user)) });
+      }
+      if (match('/doorbell', ['GET','POST'])) {
+        if(method==='POST'){
+          const input=await authorizedBody();pruneSocial();
+          const selected=one('SELECT f.*,o.owner FROM focus_sessions f JOIN offices o ON o.id=f.office WHERE f.id=?',text(input.sessionId,'session',80));
+          if(!selected||selected.owner===user.id||!access(String(selected.office),user))fail(404,'Session unavailable.');
+          const pref=doorbellPref(String(selected.owner));if(!pref.enabled||pref.dnd)fail(409,'The doorbell is unavailable.');
+          if(activeMembership(user))fail(409,'Leave your current focus session first.');
+          const quiet=quietInput(input.quiet);
+          if(one('SELECT last FROM doorbell_cooldown WHERE requester=? AND host=? AND last>?',user.id,String(selected.owner),now()-60_000))fail(429,'Wait one minute before ringing again.');
+          if(Number(one("SELECT COUNT(*) AS count FROM doorbell_requests WHERE session=? AND status='pending'",String(selected.id))!.count)>=12)fail(429,'The doorbell is busy. Try later.');
+          const id=randomUUID();run('INSERT INTO doorbell_requests VALUES(?,?,?,?,?,?,?,?)',id,user.id,String(selected.owner),String(selected.id),Number(quiet),now(),now()+120_000,'pending');
+          run('INSERT INTO doorbell_cooldown VALUES(?,?,?) ON CONFLICT(requester,host) DO UPDATE SET last=excluded.last',user.id,String(selected.owner),now());
+          return reply(201,{id});
+        }
+        const rows=all("SELECT r.*,u.name AS requesterName,h.name AS hostName,o.name AS officeName FROM doorbell_requests r JOIN users u ON u.id=r.requester JOIN users h ON h.id=r.host JOIN focus_sessions f ON f.id=r.session JOIN offices o ON o.id=f.office WHERE r.requester=? OR (r.host=? AND r.status='pending') ORDER BY r.created DESC",user.id,user.id);
+        const project=(r:Row)=>({id:r.id,sessionId:r.session,requesterName:r.requesterName,hostName:r.hostName,officeName:r.officeName,quiet:!!r.quiet,expiresAt:r.expires,status:r.status});
+        const sessions=all('SELECT f.*,o.owner FROM focus_sessions f JOIN offices o ON o.id=f.office JOIN grants g ON g.office=f.office WHERE g.user=? AND o.owner<>?',user.id,user.id).map(r=>({...focus(r,user)}));
+        return reply(200,{viewerId:user.id,...doorbellPref(user.id),incoming:rows.filter(r=>r.host===user.id).map(project),outgoing:rows.filter(r=>r.requester===user.id).map(project),sessions});
+      }
+      if(match('/doorbell/settings',['POST'])){
+        const input=await authorizedBody();if(typeof input.enabled!=='boolean'||typeof input.dnd!=='boolean')fail(400,'Choose doorbell and quiet settings.');
+        run('INSERT INTO doorbell_prefs VALUES(?,?,?) ON CONFLICT(user) DO UPDATE SET enabled=excluded.enabled,dnd=excluded.dnd',user.id,Number(input.enabled),Number(input.dnd));
+        if(!input.enabled||input.dnd)run("UPDATE doorbell_requests SET status='declined' WHERE host=? AND status='pending'",user.id);
+        return reply(200,{ok:true});
+      }
+      const bellMatch=route.match(/^\/doorbell\/([\w-]+)(?:\/(accept|decline))?$/);
+      if(bellMatch){
+        const action=bellMatch[2];if(method!==(action?'POST':'DELETE'))fail(405,'Method not allowed.');
+        await authorizedBody();pruneSocial();const r=one('SELECT * FROM doorbell_requests WHERE id=?',bellMatch[1]);
+        if(!r||(action?r.host!==user.id:r.requester!==user.id))fail(404,'Request unavailable.');
+        if(!action){run('DELETE FROM doorbell_requests WHERE id=?',String(r.id));return reply(200,{ok:true});}
+        if(r.status!=='pending')fail(409,'Request already handled.');
+        if(action==='decline'){run("UPDATE doorbell_requests SET status='declined' WHERE id=?",String(r.id));return reply(200,{ok:true});}
+        const pref=doorbellPref(user.id);if(!pref.enabled||pref.dnd)fail(409,'The doorbell is silenced.');
+        const f=one('SELECT * FROM focus_sessions WHERE id=?',String(r.session));const guest=one('SELECT id,handle,name FROM users WHERE id=?',String(r.requester)) as User;
+        if(!f||!access(String(f.office),guest))fail(404,'Request unavailable.');
+        const active=activeMembership(guest);if(active&&active.id!==f.id)fail(409,'Your friend is already in another session.');
+        if(!active&&Number(one('SELECT COUNT(*) AS count FROM focus_members WHERE session=?',String(f.id))!.count)>=24)fail(409,'This session is full.');
+        run('INSERT INTO focus_members VALUES(?,?,?) ON CONFLICT(session,user) DO NOTHING',String(f.id),guest.id,Number(r.quiet));
+        run("UPDATE doorbell_requests SET status='accepted' WHERE id=?",String(r.id));return reply(200,{ok:true});
       }
       if (match('/focus', ['POST'])) {
         const input = await authorizedBody(); pruneSocial();
@@ -286,6 +337,8 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
           return reply(200, { ok: true });
         }
         const quiet = quietInput(input.quiet);
+        const pref=doorbellPref(String(one('SELECT owner FROM offices WHERE id=?',String(selected.office))!.owner));
+        if((pref.enabled||pref.dnd) && !isHost && !one('SELECT user FROM focus_members WHERE session=? AND user=?',String(selected.id),user.id))fail(403,'Ring the doorbell and wait for host approval.');
         const membership = activeMembership(user);
         if (membership && membership.id !== selected.id) fail(409, 'Leave or end your current focus session first.');
         if (!one('SELECT user FROM focus_members WHERE session=? AND user=?', focusMatch[1], user.id) && Number(one('SELECT COUNT(*) AS count FROM focus_members WHERE session=?', focusMatch[1])!.count) >= 24) fail(409, 'This focus session is full.');
@@ -332,7 +385,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
         const paused = input.paused === undefined ? Number(current.paused) : Number(input.paused);
         // Pausing removes the snapshot; resuming cannot accidentally republish old activity.
         run('UPDATE offices SET name=?,paused=?,agents=CASE WHEN ?=1 THEN \'[]\' ELSE agents END,updated=CASE WHEN ?=1 THEN NULL ELSE updated END WHERE id=?', name, paused, paused, paused, String(office.id));
-        if (input.appearance !== undefined) run('INSERT INTO appearance VALUES(?,?) ON CONFLICT(office) DO UPDATE SET value=excluded.value', String(office.id), JSON.stringify({ theme: input.appearance.theme, layout: input.appearance.layout, lighting: input.appearance.lighting }));
+        if (input.appearance !== undefined) run('INSERT INTO appearance VALUES(?,?) ON CONFLICT(office) DO UPDATE SET value=excluded.value', String(office.id), JSON.stringify(cleanAppearance(input.appearance)));
         return reply(200, session(user));
       }
       if (match('/publish', ['POST'])) {

@@ -102,3 +102,15 @@ Focus sessions and moments use your optional building account. The existing invi
 For the full two-office first tour, run `npm run demo:friends` and open [the guided simulation](http://127.0.0.1:5175/preview/tour). This loopback-only launcher uses disposable synthetic identities, preaccepted demo invitations, Maya's simulated focus session and one simulated moment. Normal app routes never automatically sign in or create consent. The tour is user-paced; “30-second tour” is an invitation to explore, not a forced timer.
 
 Verification: `npm test`, `npm run build`, `npm run test:e2e` (including the social browser checks), and `npm run test:tour`. `npm run test:social` runs just the synthetic multi-user social flow. No real private provider data is required.
+
+## Personal floors and doorbell
+
+Open **Friends & characters → Office style** to choose your accent, emblem and three raised shelf furnishings (plants, books or lamps). Apply saves and reopens the office, following the existing style behavior. The decor appears in your full office and building preview; defaults keep the original room. With an account, explicitly saved decor is visible to activity guests; presence-only guests never receive it. Your floor name remains editable under Sharing.
+
+Open **Friends & characters → Doorbell** to let invited friends request to join your focus session. It starts off. Once enabled, new participants need **Let them join** approval; **Not now** declines. Guests can choose quiet mode before ringing and cancel their request. Rings expire after two minutes, and a one-minute cooldown prevents repeated ringing even after cancellation.
+
+**Do Not Disturb** blocks new rings and focus participants, and declines pending requests. Existing participants remain. With both DND and ringing off, the original Join session action works. Approval never upgrades a guest's office access. No audio, messages, prompts or task information are sent. Dismissing an accepted request receipt does not leave the focus session; use its Leave session action.
+
+`npm run test:doorbell` runs the synthetic two-user browser checks. It is also included in `npm run test:e2e`.
+
+In the disposable demo, [Simulate a doorbell](http://127.0.0.1:5175/preview/doorbell) enables simulated Maya's doorbell; she automatically accepts valid demo rings. This behavior is confined to the demo launcher. If you already joined her focus session during the tour, leave that session before trying a new ring.

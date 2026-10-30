@@ -56,3 +56,5 @@ section { margin-top: 24px; }
 
 .social-menu-actions { display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px; }
 .social-menu-actions button { font-size:14px; }
+
+.floor-identity-fields { border:2px solid var(--edge);padding:16px;display:grid;gap:14px;min-width:0; }

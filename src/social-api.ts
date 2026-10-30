@@ -4,7 +4,7 @@ export interface FocusParticipant { userId: string; name: string; quiet: boolean
 export interface FocusSession {
   id: string; officeId: string; officeName: string; hostId: string; hostName: string;
   startedAt: number; endsAt: number; participants: FocusParticipant[]; participantCount: number;
-  isHost: boolean; joined: boolean;
+  isHost: boolean; joined: boolean; doorbell?: 'open'|'approval'|'dnd';
 }
 export type MomentKind = 'shipped' | 'milestone' | 'helped';
 export interface Moment {

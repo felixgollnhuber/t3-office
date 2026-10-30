@@ -1,3 +1,4 @@
+import { addFloorIdentity } from './floor-identity';
 import { PixelPipeline } from './pixel';
 import { THEMES, type Theme } from './themes';
 import { toon } from './materials';
@@ -66,6 +67,7 @@ export async function openBuildingView(openFriends: () => void, host?: BuildingR
   };
   const box = (parent: THREE.Object3D, color: string, x: number, y: number, z: number, w: number, h: number, d: number) => { const mesh = new THREE.Mesh(unit, mat(color)); mesh.position.set(x, y, z); mesh.scale.set(w, h, d); mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh); return mesh; };
   const models = new THREE.Group(); scene.add(models);
+  const identityDisposals: (()=>void)[] = [];
   const momentLamps: {light:THREE.PointLight;at:number}[] = [];
   const rings = new Map<string, THREE.LineSegments>(); const rowY = new Map<string, number>();
   const ringMaterial = new THREE.LineBasicMaterial({ color: '#ffda83' });
@@ -99,7 +101,7 @@ export async function openBuildingView(openFriends: () => void, host?: BuildingR
     cabinTarget = rowY.get(id) ?? 0; paintSelection(); if (resetScroll) root.querySelector('aside')!.scrollTop = 0;
   }
   function build() {
-    models.clear(); figureGeometries.forEach(g => g.dispose()); figureGeometries.clear(); figures.length = 0; momentLamps.length = 0; rings.clear(); rowY.clear(); labelLayer.replaceChildren();
+    identityDisposals.splice(0).forEach(dispose=>dispose()); models.clear(); figureGeometries.forEach(g => g.dispose()); figureGeometries.clear(); figures.length = 0; momentLamps.length = 0; rings.clear(); rowY.clear(); labelLayer.replaceChildren();
     const shown = floors.slice(windowStart, windowStart + 24); const total = shown.length * 3.4;
     box(models, theme.slab, 0, -3.6, 0, 36, .6, 25);
     box(models, '#839188', 0, -3.15, 0, 16, .3, 10);
@@ -144,6 +146,7 @@ export async function openBuildingView(openFriends: () => void, host?: BuildingR
         box(group, '#e8bd61', 5.8, .7, 3.45, .8, .8, .55); box(group, '#fff0b8', 5.8, 1.35, 3.45, .36, .5, .36);
         const light = new THREE.PointLight('#ffd67b', 2, 8, 1.5); light.position.set(5.8, 1.5, 3); group.add(light); momentLamps.push({light,at:f.moment.createdAt});
       }
+      if (f.scope !== 'presence' && f.appearance?.identity) { const decor=addFloorIdentity(group,f.appearance.identity,true);if(decor.userData.dispose)identityDisposals.push(decor.userData.dispose); }
       box(group, f.online ? '#8dcba4' : '#bdac83', 0, .38, 3.95, 13, .12, .15);
       const ring = new THREE.LineSegments(edges, ringMaterial); ring.scale.set(14.2, 3.15, 8.2); ring.position.y = 1.4; ring.visible = false; group.add(ring); rings.set(f.id, ring);
       const label = document.createElement('button'); label.dataset.floor = f.id; label.textContent = (f.moment && f.scope !== 'presence' ? '★ ' : '') + (f.isOwner ? `${T.home} · ${f.name}` : `${windowStart + i + 1} · ${f.name}`); labelLayer.append(label);
@@ -181,6 +184,7 @@ export async function openBuildingView(openFriends: () => void, host?: BuildingR
   function close() {
     if (closed) return; closed = true; closeCurrent = undefined; cancelAnimationFrame(raf); clearInterval(poll); observer.disconnect();
     window.removeEventListener('office-elevator-move', moveCabin); window.removeEventListener('office-building-close', close); window.removeEventListener('pagehide', close); window.removeEventListener('office-departure', fit);
+    identityDisposals.splice(0).forEach(dispose=>dispose());
     fallback?.dispose(); sun.shadow.map?.dispose(); unit.dispose(); leaves.dispose(); edges.dispose(); ringMaterial.dispose(); figureGeometries.forEach(g => g.dispose()); textured.forEach(m => { m.map?.dispose(); m.dispose(); });
     // Cached toon materials and the host canvas/pipeline belong to the original office.
     canvas.hidden = false;

@@ -1,3 +1,4 @@
+import { addFloorIdentity } from './floor-identity';
 import { B } from './i18n/building';
 import { CharacterEditor } from './character-editor';
 import { DEFAULT_APPEARANCE, isAppearance } from './appearance';
@@ -95,6 +96,8 @@ async function main() {
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const pipe = new PixelPipeline(canvas, pixelFor(window.devicePixelRatio || 1), theme.post);
   const office = buildOffice(theme);
+  addFloorIdentity(office.scene, appearance.identity);
+  document.body.dataset.floorIdentity = JSON.stringify(appearance.identity ?? null);
   const cycle = new DayCycle(office.scene, office.sun, office.hemi, office.viewTex, pipe, settings.get('lat'), settings.get('lon'));
   const rain = office.viewTex ? new Rain(office.scene) : null;
   for (const m of office.lamps.mats) cycle.addLamp(m, 2.2, 0.4);

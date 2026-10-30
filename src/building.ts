@@ -1,7 +1,7 @@
 import { locale } from './i18n';
 import { travelToFloor } from './elevator';
 import { settings } from './settings';
-import { DEFAULT_APPEARANCE, isAppearance, OFFICE_LAYOUTS, OFFICE_LIGHTING, type Appearance } from './appearance';
+import { DEFAULT_APPEARANCE, DEFAULT_IDENTITY, FLOOR_ACCENTS, FLOOR_EMBLEMS, FLOOR_ITEMS, FLOOR_SLOTS, isAppearance, cleanAppearance, OFFICE_LAYOUTS, OFFICE_LIGHTING, type Appearance } from './appearance';
 /** Optional friends menu embedded in the original office. Own-office use never requires a building account. */
 import '@fontsource/pixelify-sans/700.css';
 import '@fontsource-variable/bitcount-prop-single';
@@ -40,12 +40,14 @@ function notice(text: string, error = false) {
 async function run(task: () => Promise<void>) {
   try { await task(); } catch (error) { notice(error instanceof Error ? error.message : B.genericError, true); }
 }
-const socialLabels = locale({ en: {focus:'Build together', moments:'We shipped', tour:'Take a tour'}, de:{focus:'Gemeinsam arbeiten',moments:'Unsere Erfolge',tour:'Tour starten'} });
+const personalLabels = locale({en:{title:'Make this floor yours',accent:'Accent',emblem:'Emblem',slots:['West shelf','Center shelf','East shelf'],accents:['Original','Sage','Amber','Rose','Sky'],emblems:['None','Leaf','Star','Moon'],items:['Empty','Plant','Books','Lamp'],hint:'Raised shelves keep paths and desk capacity unchanged. Activity guests see your saved choices; presence guests do not.'},de:{title:'Deine persönliche Etage',accent:'Akzent',emblem:'Symbol',slots:['Westregal','Mittelregal','Ostregal'],accents:['Original','Salbei','Bernstein','Rose','Himmel'],emblems:['Keins','Blatt','Stern','Mond'],items:['Leer','Pflanze','Bücher','Lampe'],hint:'Wandregale halten Wege und Schreibtische frei. Aktivitätsgäste sehen gespeicherte Auswahlen; Anwesenheitsgäste nicht.'}});
+const identityFields = () => { const d=appearance.identity ?? DEFAULT_IDENTITY; const select=(name:string,label:string,values:readonly string[],labels:readonly string[],value:string)=>`<label>${label}<select name="${name}">${values.map((v,i)=>`<option value="${v}" ${v===value?'selected':''}>${labels[i]}</option>`).join('')}</select></label>`; return `<fieldset class="floor-identity-fields"><legend>${personalLabels.title}</legend><p class="hint">${personalLabels.hint}</p>${select('accent',personalLabels.accent,FLOOR_ACCENTS,personalLabels.accents,d.accent)}${select('emblem',personalLabels.emblem,FLOOR_EMBLEMS,personalLabels.emblems,d.emblem)}${FLOOR_SLOTS.map((slot,i)=>select(slot,personalLabels.slots[i],FLOOR_ITEMS,personalLabels.items,d.slots[slot])).join('')}</fieldset>`; };
+const socialLabels = locale({ en: {bell:'Doorbell', focus:'Build together', moments:'We shipped', tour:'Take a tour'}, de:{bell:'Türklingel',focus:'Gemeinsam arbeiten',moments:'Unsere Erfolge',tour:'Tour starten'} });
 function render() {
-  root.innerHTML = `<header><h1>${B.friendsMenu}</h1><button data-action="close" aria-label="${B.close}">×</button></header><nav class="menu-tabs" aria-label="${B.friendsMenu}">${(['friends', 'characters', 'sharing', 'style'] as const).map((t) => `<button data-tab="${t}" aria-pressed="${tab === t}">${t === 'friends' ? B.friends : t === 'characters' ? B.characters : t === 'style' ? B.decorate : B.sharing}</button>`).join('')}</nav><p id="notice" role="status" aria-live="polite" hidden></p><div class="social-menu-actions"><button data-action="focus">${socialLabels.focus}</button><button data-action="moments">${socialLabels.moments}</button><button data-action="tour">${socialLabels.tour}</button></div><section id="panel"></section>`;
+  root.innerHTML = `<header><h1>${B.friendsMenu}</h1><button data-action="close" aria-label="${B.close}">×</button></header><nav class="menu-tabs" aria-label="${B.friendsMenu}">${(['friends', 'characters', 'sharing', 'style'] as const).map((t) => `<button data-tab="${t}" aria-pressed="${tab === t}">${t === 'friends' ? B.friends : t === 'characters' ? B.characters : t === 'style' ? B.decorate : B.sharing}</button>`).join('')}</nav><p id="notice" role="status" aria-live="polite" hidden></p><div class="social-menu-actions"><button data-action="focus">${socialLabels.focus}</button><button data-action="moments">${socialLabels.moments}</button><button data-action="tour">${socialLabels.tour}</button><button data-action="doorbell">${socialLabels.bell}</button></div><section id="panel"></section>`;
   const panel = root.querySelector('#panel')!;
   if (tab === 'style') {
-    panel.innerHTML = `<h2>${B.decorate}</h2><p class="hint">${B.styleHint}</p>${!local && embedded ? `<p>${B.styleVisitor}</p><button data-action="own">${B.own}</button>` : `<form id="style-form"><label>${B.themeLabel}<select name="theme">${THEMES.map((t) => `<option value="${t.id}" ${appearance.theme === t.id ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label><label>${B.layoutLabel}<select name="layout">${OFFICE_LAYOUTS.map((v, i) => `<option value="${v}" ${appearance.layout === v ? 'selected' : ''}>${[B.originalLayout, B.focusLayout, B.loungeLayout][i]}</option>`).join('')}</select></label><label>${B.lightingLabel}<select name="lighting">${OFFICE_LIGHTING.map((v, i) => `<option value="${v}" ${appearance.lighting === v ? 'selected' : ''}>${[B.originalLight, B.warmLight, B.coolLight][i]}</option>`).join('')}</select></label><p class="hint">${B.styleLocal}</p><button type="submit">${B.applyStyle}</button></form>`}`;
+    panel.innerHTML = `<h2>${B.decorate}</h2><p class="hint">${B.styleHint}</p>${!local && embedded ? `<p>${B.styleVisitor}</p><button data-action="own">${B.own}</button>` : `<form id="style-form"><label>${B.themeLabel}<select name="theme">${THEMES.map((t) => `<option value="${t.id}" ${appearance.theme === t.id ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label><label>${B.layoutLabel}<select name="layout">${OFFICE_LAYOUTS.map((v, i) => `<option value="${v}" ${appearance.layout === v ? 'selected' : ''}>${[B.originalLayout, B.focusLayout, B.loungeLayout][i]}</option>`).join('')}</select></label><label>${B.lightingLabel}<select name="lighting">${OFFICE_LIGHTING.map((v, i) => `<option value="${v}" ${appearance.lighting === v ? 'selected' : ''}>${[B.originalLight, B.warmLight, B.coolLight][i]}</option>`).join('')}</select></label>${identityFields()}<p class="hint">${B.styleLocal}</p><button type="submit">${B.applyStyle}</button></form>`}`;
     return;
   }
   if (tab === 'characters') {
@@ -124,10 +126,12 @@ root.addEventListener('submit', (event) => {
   const epoch = generation;
   void run(async () => {
     if (form.id === 'style-form') {
-      if (!isAppearance(data)) return;
+      const chosen = {...data,identity:{accent:data.accent,emblem:data.emblem,slots:{west:data.west,center:data.center,east:data.east}}};
+      if (!isAppearance(chosen)) return;
+      const savedAppearance = cleanAppearance(chosen);
       const epoch = generation;
-      if (session) { const result = await api<Session>('/office', 'POST', { appearance: data }); if (epoch !== generation || !session) return; session = result; }
-      appearance = data;
+      if (session) { const result = await api<Session>('/office', 'POST', { appearance: savedAppearance, actorId:session.user.id }); if (epoch !== generation || !session) return; session = result; }
+      appearance = savedAppearance;
       if (embedded) send({ type: 'office-appearance-save', appearance });
       else {
         localStorage.setItem('office.appearance.v1', JSON.stringify(appearance));
@@ -168,6 +172,7 @@ root.addEventListener('click', (event) => {
     }
     if (button.dataset.delete) { await api(`/${button.dataset.delete}/${encodeURIComponent(button.dataset.id!)}`, 'DELETE'); if (epoch !== generation || !session) return; if (button.dataset.delete === 'publisher-tokens') await renderKeys(); else await refreshFriends(); return; }
     switch (button.dataset.action) {
+      case 'doorbell': if(embedded)send({type:'office-open-doorbell'});else location.assign('/?doorbell=1');break;
       case 'focus': case 'moments': if (embedded) send({type:'office-open-social',tab:button.dataset.action === 'moments' ? 'moments' : 'focus'}); else location.assign('/?social=' + button.dataset.action); break;
       case 'tour': if (embedded) send({type:'office-start-tour'}); else location.assign('/?tour=1'); break;
       case 'building': if (embedded) send({ type: 'office-open-building' }); else location.assign('/?building=1'); break;
