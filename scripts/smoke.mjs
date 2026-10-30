@@ -52,13 +52,19 @@ try {
   await editor.getByRole('button', { name: 'Save character', exact: true }).click();
   await owner.waitForFunction((id) => window.__source?.threads().find((t) => t.id === id)?.name === 'Cody', firstLocal);
   assert.equal(await owner.evaluate((id) => JSON.stringify(window.__world.workers.get(id).look), firstLocal), originalLook, 'Renaming alone must preserve the original appearance');
+  await owner.locator('body.focused').waitFor({ state: 'detached' });
+  assert.equal(await owner.locator('.focus-view.on').count(), 0, 'Successful save returns to the office overview');
+  // Reopening during the camera return must reverse the transition cleanly.
+  await owner.evaluate((id) => window.__focusAgent(id), firstLocal);
+  await editor.waitFor();
   await editor.locator('select[name="hairStyle"]').selectOption('mohawk');
   await editor.locator('select[name="outfit"]').selectOption('hoodie');
   await editor.locator('input[name="shirt"][value="#d35c82"]').check();
   await editor.locator('input[name="glasses"]').check();
   await editor.getByRole('button', { name: 'Save character', exact: true }).click();
   await owner.waitForFunction((id) => window.__world.workers.get(id).look.hairStyle === 'mohawk' && window.__world.workers.get(id).look.shirt === '#d35c82', firstLocal);
-  await owner.locator('.focus-view [data-a="close"]').click();
+  await owner.locator('body.focused').waitFor({ state: 'detached' });
+  assert.equal(await owner.locator('.focus-view.on').count(), 0);
   await owner.reload();
   await owner.waitForFunction((id) => window.__source?.threads().find((t) => t.id === id)?.name === 'Cody' && window.__world.workers.get(id).look.hairStyle === 'mohawk', firstLocal);
   await openMenu(owner);

@@ -1,3 +1,4 @@
+import { B } from './i18n/building';
 import { CharacterEditor } from './character-editor';
 import { DEFAULT_APPEARANCE, isAppearance } from './appearance';
 import { styleRoom } from './roomstyle';
@@ -162,7 +163,7 @@ async function main() {
     if (id === 'boss') return hud!.toast(TXT.bossBusy);
     if (world.workers.has(id) || isBoss(id)) focusAgent(id);
   };
-  const inspector = new AgentInspector(source, world, () => clock.now(), shared ? undefined : new CharacterEditor(source, world));
+  const inspector = new AgentInspector(source, world, () => clock.now(), shared ? undefined : new CharacterEditor(source, world, () => { closeFocus(); homeView(); hud!.toast(B.characterSaved); }));
   const tagMode = () => (settings.get('tags') === 'auto' ? (theme.tagMode ?? 'full') : (settings.get('tags') as 'full' | 'quiet'));
   const tags = new Tags(tagMode(), (id) => {
     noteClick({ kind: 'agent', id, name: '' });
@@ -315,7 +316,7 @@ async function main() {
   };
   const focusAgent = (id: string) => {
     inspector.selectCharacter(id);
-    if (fly.spot === agentSpot) {
+    if (fly.spot === agentSpot && fly.dir >= 0) {
       previewDesk?.preview(null);
       previewDesk = null;
       agentId = id;

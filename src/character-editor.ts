@@ -6,7 +6,7 @@ import { HAIR_STYLES, OUTFITS, SKIN_COLORS, HAIR_COLORS, SHIRT_COLORS, isCharact
 import { B } from './i18n/building';
 const esc = (v: string) => v.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 export class CharacterEditor {
-  constructor(private source: AgentSource, private world: World) {}
+  constructor(private source: AgentSource, private world: World, private onSaved?: () => void) {}
   render(el: HTMLElement, id: string) {
     if (el.querySelector<HTMLFormElement>('form')?.dataset.character === id) return;
     const t = this.source.threads().find((t) => t.id === id); const worker = this.world.workers.get(id);
@@ -30,6 +30,7 @@ export class CharacterEditor {
       if (styleChanged && !isCharacterStyle(style)) return;
       saveProfile(id, { name, area, ...(styleChanged && isCharacterStyle(style) ? { style } : current?.style ? { style: current.style } : {}) });
       form.querySelector('.editor-result')!.textContent = B.characterSaved;
+      this.onSaved?.();
     });
   }
 }
