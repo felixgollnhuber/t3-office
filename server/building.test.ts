@@ -499,3 +499,98 @@ test('doorbell requires opt-in, approval and current grants; DND, cooldown, expi
   await f.restart();assert.equal((await f.request('/doorbell','GET',undefined,host.client)).data.dnd,true);
  }finally{await f.close();}
 });
+
+test('human identities are validated, persisted and separate from agent profiles',async()=>{
+ const f=await fixture();try{
+  const a=await f.register('human_alice');assert.equal((await f.request('/human')).status,401);
+  const profile={name:'Alice the person',color:'rose',hair:'curly',availability:'busy',privatePath:'never-show'};
+  const saved=await f.request('/human','POST',profile,a.client);assert.equal(saved.status,200);assert.equal(saved.data.profile.name,profile.name);assert.equal(JSON.stringify(saved.data).includes('never-show'),false);
+  assert.equal((await f.request('/human','POST',{...profile,color:'https://invalid.example/avatar'},a.client)).status,400);
+  assert.equal((await f.request('/human','POST',{...profile,name:'line\nbreak'},a.client)).status,400);
+  const key=(await f.request('/publisher-tokens','POST',{},a.client)).data.token;assert.equal((await f.request('/human','GET',undefined,{}, {authorization:`Bearer ${key}`})).status,401);
+  await f.restart();assert.equal((await f.request('/human','GET',undefined,a.client)).data.profile.color,'rose');
+ }finally{await f.close();}
+});
+
+test('human chat requires distinct admission, active presence and current permission; no old history leaks',async()=>{
+ const f=await fixture();try{
+  const h=await f.register('room_host'),g=await f.register('room_guest'),outsider=await f.register('room_outsider');await grant(f,h,g,'presence');const room='/rooms/'+h.office.id;
+  assert.equal((await f.request(room+'/state','GET',undefined,g.client)).status,403);
+  assert.equal((await f.request(room+'/request','POST',{},g.client)).status,409);
+  await f.request('/human','POST',{name:'Host private human alias',color:'sky',hair:'short',availability:'away'},h.client);
+  const directory=(await f.request('/rooms','GET',undefined,g.client)).data;assert.equal(JSON.stringify(directory).includes('Host private human alias'),false,'Editing a human profile alone must not reveal its name');
+  await f.request(room+'/settings','POST',{open:true,dnd:false},h.client);
+  const hostEntry=(await f.request(room+'/enter','POST',{},h.client)).data;assert.ok(hostEntry.lease);
+  await f.request(room+'/messages','POST',{text:'Earlier private conversation',clientId:'before-guest',lease:hostEntry.lease},h.client);
+  assert.equal((await f.request(room+'/enter','POST',{},g.client)).status,403);
+  const req=(await f.request(room+'/request','POST',{},g.client)).data;
+  assert.equal((await f.request(room+'/requests','GET',undefined,g.client)).status,404);
+  assert.equal((await f.request(room+'/requests/'+req.id+'/accept','POST',{},g.client)).status,404);
+  await f.request(room+'/requests/'+req.id+'/accept','POST',{},h.client);
+  assert.equal((await f.request(room+'/state','GET',undefined,g.client)).status,403,'Admission alone is not presence');
+  const entry=(await f.request(room+'/enter','POST',{},g.client)).data;
+  const state=(await f.request(room+'/state','GET',undefined,g.client)).data;assert.equal(state.people.length,2);assert.deepEqual(state.messages,[],'Guest does not receive pre-admission history');
+  assert.equal((await f.request(room+'/state','GET',undefined,outsider.client)).status,404);
+  const msg={text:'Hello <script>not markup</script>',clientId:'greeting',lease:entry.lease,actorId:g.user.id};
+  const sent=await f.request(room+'/messages','POST',msg,g.client);assert.equal(sent.status,201);const again=await f.request(room+'/messages','POST',msg,g.client);assert.equal(again.data.id,sent.data.id);
+  assert.equal((await f.request(room+'/state','GET',undefined,h.client)).data.messages.length,2);
+  assert.equal((await f.request(room+'/messages','POST',{...msg,clientId:'spam'},g.client)).status,429);
+  await f.request(room+'/messages/'+sent.data.id,'DELETE',{},h.client);
+  assert.equal((await f.request(room+'/messages','POST',msg,g.client)).data.id,sent.data.id,'Retry cannot resurrect a deleted message');
+  assert.equal((await f.request(room+'/state','GET',undefined,g.client)).data.messages.length,0);
+  f.advance(1001);assert.equal((await f.request(room+'/presence','POST',{lease:entry.lease,x:1,z:7},g.client)).status,200);
+  assert.equal((await f.request(room+'/state','GET',undefined,h.client)).data.people.find((p:any)=>p.id===g.user.id).x,1);
+  assert.equal((await f.request(room+'/presence','POST',{lease:entry.lease,x:13,z:-8},g.client)).status,429);
+  assert.equal((await f.request(room+'/presence','POST',{lease:entry.lease,x:Infinity,z:0},g.client)).status,400);
+  const newEntry=(await f.request(room+'/enter','POST',{},g.client)).data;
+  assert.equal((await f.request(room+'/presence','POST',{lease:entry.lease,x:0,z:7},g.client)).status,409,'Old tab cannot move the new lease');
+  await f.request(room+'/leave','POST',{lease:entry.lease},g.client);assert.equal((await f.request(room+'/state','GET',undefined,g.client)).status,200,'Late leave cannot evict new tab');
+  await f.request(room+'/leave','POST',{lease:newEntry.lease},g.client);assert.equal((await f.request(room+'/state','GET',undefined,g.client)).status,403);
+  await f.request(room+'/settings','POST',{open:true,dnd:true},h.client);assert.equal((await f.request(room+'/enter','POST',{},g.client)).status,409,'DND prevents absent admitted guests from starting a new visit');
+  await f.request(room+'/settings','POST',{open:true,dnd:false},h.client);
+  await f.restart();const restored=(await f.request(room+'/enter','POST',{},g.client)).data;assert.equal((await f.request(room+'/state','GET',undefined,g.client)).data.messages.length,0);
+  f.advance(1001);await f.request(room+'/messages','POST',{text:'After restart',clientId:'after-restart',lease:hostEntry.lease},h.client);assert.equal((await f.request(room+'/state','GET',undefined,g.client)).data.messages[0].text,'After restart');
+ }finally{await f.close();}
+});
+
+test('room close, DND, removal, revocation, expiry and logout protect human state',async()=>{
+ const f=await fixture();try{
+  const h=await f.register('visit_host'),g=await f.register('visit_guest');await grant(f,h,g,'activity');const room='/rooms/'+h.office.id;
+  await f.request(room+'/settings','POST',{open:true,dnd:false},h.client);
+  let req=(await f.request(room+'/request','POST',{},g.client)).data;
+  await f.request(room+'/requests/'+req.id,'DELETE',{},g.client);assert.equal((await f.request(room+'/request','POST',{},g.client)).status,429,'Cancellation does not reset cooldown');
+  f.advance(60_001);req=(await f.request(room+'/request','POST',{},g.client)).data;f.advance(120_001);assert.equal((await f.request(room+'/requests/'+req.id+'/accept','POST',{},h.client)).status,404);
+  req=(await f.request(room+'/request','POST',{},g.client)).data;await f.request(room+'/settings','POST',{open:true,dnd:true},h.client);assert.equal((await f.request(room+'/requests','GET',undefined,h.client)).data.requests.length,0);assert.equal((await f.request(room+'/request','POST',{},g.client)).status,409);
+  await f.request(room+'/settings','POST',{open:true,dnd:false},h.client);f.advance(60_001);req=(await f.request(room+'/request','POST',{},g.client)).data;
+  await f.request(room+'/requests/'+req.id+'/accept','POST',{},h.client);let entered=(await f.request(room+'/enter','POST',{},g.client)).data;
+  await f.request(room+'/kick/'+g.user.id,'POST',{},h.client);assert.equal((await f.request(room+'/state','GET',undefined,g.client)).status,403);assert.equal((await f.request(room+'/enter','POST',{},g.client)).status,403);
+  f.advance(60_001);req=(await f.request(room+'/request','POST',{},g.client)).data;await f.request(room+'/requests/'+req.id+'/accept','POST',{},h.client);entered=(await f.request(room+'/enter','POST',{},g.client)).data;
+  const access=(await f.request('/grants','GET',undefined,h.client)).data.grants[0];await f.request('/grants/'+access.id,'DELETE',{},h.client);
+  assert.equal((await f.request(room+'/state','GET',undefined,g.client)).status,404);await grant(f,h,g,'activity');assert.equal((await f.request(room+'/enter','POST',{},g.client)).status,403,'Regrant does not restore conversation admission');
+  f.advance(60_001);req=(await f.request(room+'/request','POST',{},g.client)).data;await f.request(room+'/requests/'+req.id+'/accept','POST',{},h.client);entered=(await f.request(room+'/enter','POST',{},g.client)).data;
+  f.advance(20_001);assert.equal((await f.request(room+'/state','GET',undefined,g.client)).status,403,'Presence expires without heartbeats');
+  await f.request(room+'/enter','POST',{},g.client);await f.request(room+'/settings','POST',{open:false,dnd:false},h.client);assert.equal((await f.request(room+'/state','GET',undefined,g.client)).status,403);
+  const own=(await f.request('/rooms/'+g.office.id+'/enter','POST',{},g.client)).data;await f.request('/logout','POST',{},g.client);assert.equal((await f.request('/rooms/'+g.office.id+'/state','GET',undefined,g.client)).status,401);
+  assert.equal((await f.request(room+'/settings','POST',{open:true,dnd:false,actorId:g.user.id},h.client)).status,409);
+ }finally{await f.close();}
+});
+
+test('human message bodies recheck revocation and actor identity; room leases isolate tabs and rooms',async()=>{
+ const f=await fixture();try{
+  const h=await f.register('secure_human_host'),g=await f.register('secure_human_guest');await grant(f,h,g,'activity');const room='/rooms/'+h.office.id;
+  await f.request(room+'/settings','POST',{open:true,dnd:false},h.client);const req=(await f.request(room+'/request','POST',{},g.client)).data;await f.request(room+'/requests/'+req.id+'/accept','POST',{},h.client);
+  const enter=(await f.request(room+'/enter','POST',{},g.client)).data;
+  assert.equal((await f.request(room+'/messages','POST',{lease:enter.lease,text:'x'.repeat(501),clientId:'too-long'},g.client)).status,400);
+  assert.equal((await f.request(room+'/messages','POST',{lease:enter.lease,text:'Not my account',clientId:'wrong-actor',actorId:h.user.id},g.client)).status,409);
+  let done:(n:number)=>void;const response=new Promise<number>(r=>{done=r;});
+  const slow=httpRequest(f.base+'/api/building'+room+'/messages',{method:'POST',headers:{cookie:g.client.cookie!,'content-type':'application/json'}},r=>{r.resume();r.on('end',()=>done(r.statusCode!));});
+  await new Promise<void>(resolve=>slow.write(JSON.stringify({lease:enter.lease,text:'Delayed synthetic message',clientId:'slow'}).slice(0,-1),()=>resolve()));
+  const access=(await f.request('/grants','GET',undefined,h.client)).data.grants[0];await f.request('/grants/'+access.id,'DELETE',{},h.client);slow.end('}');assert.equal(await response,404);
+  assert.equal((await f.request('/rooms/'+g.office.id+'/state','GET',undefined,g.client)).status,403);
+  const own=(await f.request('/rooms/'+g.office.id+'/enter','POST',{},g.client)).data;
+  assert.equal((await f.request(room+'/state','GET',undefined,g.client)).status,404);
+  assert.equal((await f.request('/rooms/'+g.office.id+'/presence','POST',{lease:own.lease,x:99,z:7},g.client)).status,400);
+  const pub=(await f.request('/publisher-tokens','POST',{},g.client)).data.token;
+  assert.equal((await f.request('/rooms','GET',undefined,{}, {authorization:`Bearer ${pub}`})).status,401);
+ }finally{await f.close();}
+});

@@ -114,3 +114,19 @@ Open **Friends & characters → Doorbell** to let invited friends request to joi
 `npm run test:doorbell` runs the synthetic two-user browser checks. It is also included in `npm run test:e2e`.
 
 In the disposable demo, [Simulate a doorbell](http://127.0.0.1:5175/preview/doorbell) enables simulated Maya's doorbell; she automatically accepts valid demo rings. This behavior is confined to the demo launcher. If you already joined her focus session during the tour, leave that session before trying a new ring.
+
+## Human avatars, office conversations and walking
+
+Open **People & chat** in the office, or from Friends & characters. **My avatar** sets your chosen human name, clothing color, hairstyle and availability. People have colored floor rings and explicit PERSON/YOU labels, separate from AI coworkers. Profile editing alone does not announce your presence.
+
+Under **Visits**, an owner can open their office for conversations or enable Do Not Disturb. An invited friend requests an office visit; the owner explicitly admits or declines them. The guest then chooses to enter. Activity sharing, presence-only invitations and focus-session doorbells do not automatically grant human chat access. The focus doorbell offers a separate **Office visits & chat** entry point.
+
+After entering, exchange plain-text messages in Conversation. Sending/Sent/Not sent states and a manual Retry action handle failures; retries do not duplicate accepted messages. Unread messages appear on the launcher while the panel is closed. Authors can delete their messages, and hosts can delete messages or remove visitors. Chat is stored as plaintext on this building server, not end-to-end encrypted. It never reads your agents, prompts, transcripts, files or usage automatically. Do not paste secrets.
+
+**Walk** enables tap/click-to-walk on open floor, or arrow-key movement. Turn it off to restore normal camera panning. Human avatars use the original office navigation for local paths; remote movement is interpolated from bounded server updates. Walking is limited to the main office, not a walkable city or exterior. The current local implementation uses polling rather than WebSockets. Presence-only guests keep their generic room appearance; human admission does not reveal activity-only room/character customization.
+
+Leaving removes your live avatar and chat read access. A missed heartbeat expires presence after 20 seconds. Revoking the underlying invitation grant, closing conversations or removing a guest denies subsequent reads and clears the UI; a fresh office grant does not restore conversation admission. Do Not Disturb blocks new visits and absent guests from re-entering while currently present people can remain. Admissions last while the room stays open and the grant remains valid; hosts can remove them. Requests expire in two minutes and have a one-minute cooldown.
+
+Messages are limited to 500 characters, one per second and twenty per minute. Rooms retain at most 200 messages, display the most recent 100 available to you, and hide/prune messages older than seven days on room requests. Newly admitted guests see only messages sent after admission, using a sequence boundary even for identical timestamps. Downloaded or previously seen text cannot be recalled. Nothing is publicly hosted by enabling these local features.
+
+`npm run test:humans` runs the synthetic two-user original-office avatar/chat/walking test; it is included in `npm run test:e2e`. Run `npm run demo:friends`, then open [Meet simulated Maya](http://127.0.0.1:5175/preview/people). Request entry, wait for the explicitly simulated host to admit you, enter the conversation, and send a greeting. Maya is a scripted simulation, not a real person or AI model; this automatic admission/reply behavior exists only in the disposable demo launcher.

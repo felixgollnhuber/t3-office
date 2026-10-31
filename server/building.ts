@@ -1,3 +1,4 @@
+import { humanSchema, humanRoute, revokeHumanAccess, leaveHumanRooms } from './humans.ts';
 import { isCharacterStyle, cleanCharacterStyle } from '../src/character-style.ts';
 import { DEFAULT_APPEARANCE, isAppearance, cleanAppearance } from '../src/appearance.ts';
 /** Consent-based building API. It stores only accounts, grants and explicitly published status snapshots, never local T3 data. */
@@ -86,6 +87,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
 
 
   `);
+  humanSchema(db);
   const one = (sql: string, ...values: (string | number)[]) => db.prepare(sql).get(...values) as Row | undefined;
   const all = (sql: string, ...values: (string | number)[]) => db.prepare(sql).all(...values) as Row[];
   const run = (sql: string, ...values: (string | number)[]) => db.prepare(sql).run(...values);
@@ -255,6 +257,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
         return input;
       };
       const office = ownOffice(user);
+      if(route==='/human'||route==='/rooms'||route.startsWith('/rooms/')){await humanRoute({db,now,user:()=>user,route,method,body:authorizedBody,reply,fail});return;}
       if (match('/session', ['GET'])) return reply(200, session(user));
       if (route.startsWith('/doorbell')) pruneSocial();
       if (route === '/social' || route === '/focus' || route.startsWith('/focus/') || route === '/moments' || route.startsWith('/moments/')) pruneSocial();
@@ -367,6 +370,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
       if (match('/logout', ['POST'])) {
         await authorizedBody();
         const raw = req.headers.cookie!.split(';').map((p) => p.trim()).find((p) => p.startsWith('building_session='))!.slice('building_session='.length);
+        leaveHumanRooms(db,user.id);
         run('DELETE FROM sessions WHERE token=?', hash(raw));
         cookie(req, res, '', 0);
         return reply(200, { ok: true });
@@ -492,6 +496,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
         if (method !== 'DELETE') fail(405, 'Method not allowed.');
         await authorizedBody();
         const revoked = one('SELECT user FROM grants WHERE id=? AND office=?', grantMatch[1], String(office.id));
+        if(revoked)revokeHumanAccess(db,String(office.id),String(revoked.user));
         if (revoked) run('DELETE FROM focus_members WHERE user=? AND session IN (SELECT id FROM focus_sessions WHERE office=?)', String(revoked.user), String(office.id));
         const result = run('DELETE FROM grants WHERE id=? AND office=?', grantMatch[1], String(office.id));
         if (!result.changes) fail(404, 'Access grant not found.');

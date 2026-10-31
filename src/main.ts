@@ -1,3 +1,4 @@
+import { installHumanOffice } from './humans';
 import { addFloorIdentity } from './floor-identity';
 import { B } from './i18n/building';
 import { CharacterEditor } from './character-editor';
@@ -175,6 +176,7 @@ async function main() {
 
   // camera: iso view; drag pans like a map, right-drag or shift-drag turns it a little
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  const humans = installHumanOffice({scene:office.scene,camera,canvas,nav:office.nav,floorId:shared?params.get('floor'):null});
   const baseTarget = new THREE.Vector3(3.8, 1.5, 0.6);
   const target = baseTarget.clone();
   const view = { az: 45, el: 34, px: 0, py: 0 };
@@ -809,6 +811,7 @@ async function main() {
     const typing = threads.filter((x) => x.status === 'running').reduce((s, x) => s + 1 + x.tps / 60, 0);
     sfx.update(dt, typing * 1.4);
 
+    humans.update(dt);
     pipe.render(office.scene, camera);
     const w = window.innerWidth, hh = window.innerHeight;
     tags.update([...world.anchors(), ...world.pets.anchors()], camera, w, hh);

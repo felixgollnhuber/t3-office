@@ -132,6 +132,8 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
       localStorage.setItem('office.appearance.v1', JSON.stringify(data.appearance));
       if (settings.get('theme') !== data.appearance.theme) { settings.set('theme', data.appearance.theme); return; }
       const next = new URL(location.href); next.searchParams.delete('theme'); location.assign(next);
+    } else if (data.type === 'office-open-people') {
+      dialog.close();window.dispatchEvent(new Event('office-building-close'));window.dispatchEvent(new Event('office-open-people'));
     } else if (data.type === 'office-open-doorbell') {
       void openBell();
     } else if (data.type === 'office-open-social') {
