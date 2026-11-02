@@ -422,7 +422,7 @@ async function main() {
   window.addEventListener(
     'wheel',
     (ev) => {
-      if (fly.spot || (ev.target as HTMLElement).closest('.panel, .focus-view')) return;
+      if (ev.target !== canvas || fly.spot || document.body.classList.contains('building-view-open')) return;
       // the director may have zoomed in further than the wheel goes: start from there instead of jumping back
       zoomTarget = THREE.MathUtils.clamp(zoomTarget * (1 + Math.sign(ev.deltaY) * 0.04), Math.min(0.82, zoomTarget), 1.12);
     },
@@ -443,7 +443,7 @@ async function main() {
   const repeatOf = (ev: MouseEvent) => (lastClick && performance.now() - lastClick.t < 500 && Math.hypot(ev.clientX - lastClick.x, ev.clientY - lastClick.y) < 12 ? lastClick.p : null);
   window.addEventListener('contextmenu', (ev) => ev.preventDefault());
   window.addEventListener('pointerdown', (ev) => {
-    if (document.body.classList.contains('building-view-open')) return;
+    if (ev.target !== canvas || document.body.classList.contains('building-view-open')) return;
     sfx.unlock();
     const el = ev.target as HTMLElement;
     const again = repeatOf(ev);
@@ -577,7 +577,7 @@ async function main() {
     hintEl.style.transform = `translate(${Math.max(4, Math.min(x + 14, window.innerWidth - hintEl.offsetWidth - 8))}px, ${Math.min(y + 12, window.innerHeight - hintEl.offsetHeight - 8)}px)`;
   };
   window.addEventListener('pointermove', (ev) => {
-    if (document.body.classList.contains('building-view-open')) return;
+    if (ev.target !== canvas || document.body.classList.contains('building-view-open')) { setHover(null); return; }
     if (!drag && !fly.spot && ev.timeStamp - hoverT > 30) {
       hoverT = ev.timeStamp;
       const el = ev.target as HTMLElement;
@@ -607,7 +607,8 @@ async function main() {
     goal.px = THREE.MathUtils.clamp(goal.px, -lim.x, lim.x);
     goal.py = THREE.MathUtils.clamp(goal.py, -lim.y, lim.y);
     goal.az = THREE.MathUtils.clamp(goal.az, 45 - AZ, 45 + AZ);
-    if (!click) return;
+    // A gesture released over UI (or cancelled by the browser) must never pick the scene.
+    if (!click || ev.type === 'pointercancel' || ev.target !== canvas || document.body.classList.contains('building-view-open')) return;
     const again = repeatOf(ev);
     const hit = pickAt(ev.clientX, ev.clientY, true);
     noteClick(hit);
@@ -618,15 +619,17 @@ async function main() {
     else if (again?.kind === 'thing' && again.c === hit.c && hit.c.onDouble) hit.c.onDouble();
     else hit.c.onClick();
   };
-  window.addEventListener('pointerup', endDrag);
-  window.addEventListener('pointercancel', endDrag);
+  // Capture guarantees cleanup even when a panel stops the release from bubbling.
+  window.addEventListener('pointerup', endDrag, true);
+  window.addEventListener('pointercancel', endDrag, true);
   window.addEventListener('dblclick', (ev) => {
-    if (fly.spot || (ev.target as HTMLElement).closest('.panel, .quota-wall, .focus-view')) return;
+    if (ev.target !== canvas || fly.spot || document.body.classList.contains('building-view-open')) return;
     // a double-click on somebody or something is theirs; only the empty floor resets the camera
     if (lastClick?.p && performance.now() - lastClick.t < 700) return;
     homeView();
   });
   window.addEventListener('keydown', (ev) => {
+    if (ev.target instanceof Element && ev.target.closest('#hud, dialog, .focus-view, .human-panel, .office-tour, .office-welcome, button, input, select, textarea, [contenteditable=true]')) return;
     if (ev.key === 'Escape') return closeFocus();
     if ((ev.target as HTMLElement).closest('input, select, textarea, [contenteditable=true]')) return;
     if (ev.key === 'p') return fly.spot ? closeFocus() : focusOn(spots[1]);

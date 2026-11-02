@@ -7,6 +7,8 @@ body { font-family: var(--font), system-ui, sans-serif; font-weight: 500; color:
 
 #scene { position: fixed; left: 0; top: 0; image-rendering: pixelated; display: block; }
 #tags, #hud, #wall { position: fixed; inset: 0; pointer-events: none; }
+/* Visible HUD surfaces own their input; gaps between panels still reach the office. */
+.panel { pointer-events: auto; }
 #hud button, .tag .plate { pointer-events: auto; cursor: pointer; }
 .tag.hidden { display: none; }
 
@@ -280,6 +282,8 @@ body.grabbing, body.grabbing * { cursor: grabbing !important; }
 #focus { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #tags, .panel { transition: opacity 0.3s steps(3); }
 body.focused #tags, body.focused .panel { opacity: 0; pointer-events: none; }
+/* Children with explicit pointer-events must also stop catching invisible input. */
+body.focused #tags *, body.focused #hud .panel * { pointer-events: none; }
 body.hot { cursor: pointer; }
 .spot-hint {
   position: fixed; left: 0; top: 0; display: none; pointer-events: none;

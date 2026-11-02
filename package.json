@@ -44,7 +44,7 @@
     "test": "node --experimental-strip-types --test server/building.test.ts server/accounting.test.ts server/github-identity.test.ts server/github-login.test.ts scripts/bridge.test.mjs",
     "bridge": "node scripts/bridge.mjs",
     "serve": "vite preview",
-    "test:e2e": "node scripts/building-view-test.mjs && node scripts/elevator-test.mjs && node scripts/menu-races.mjs && node scripts/smoke.mjs && node scripts/social-test.mjs && node scripts/doorbell-test.mjs && node scripts/humans-test.mjs",
+    "test:e2e": "node scripts/ui-input-test.mjs && node scripts/building-view-test.mjs && node scripts/elevator-test.mjs && node scripts/menu-races.mjs && node scripts/smoke.mjs && node scripts/social-test.mjs && node scripts/doorbell-test.mjs && node scripts/humans-test.mjs",
     "local": "node bin/local-office.mjs",
     "demo:friends": "node scripts/friend-preview.mjs",
     "test:social": "node scripts/social-test.mjs",
@@ -54,6 +54,7 @@
     "test:onboarding:recovery": "node scripts/onboarding-recovery-test.mjs",
     "test:onboarding:a11y": "node scripts/onboarding-accessibility-test.mjs",
     "test:onboarding:demo": "node scripts/onboarding-demo-test.mjs",
+    "test:ui-input": "node scripts/ui-input-test.mjs",
     "test:github": "node --experimental-strip-types scripts/github-login-test.mjs",
     "test:onboarding": "npm run test:onboarding:recovery && npm run test:onboarding:a11y && npm run test:tour && npm run test:onboarding:demo"
   },
