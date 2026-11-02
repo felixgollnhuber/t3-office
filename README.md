@@ -4,16 +4,26 @@
 
 Your original pixel-art office, with an optional **Friends & characters** menu. Based on [Felix Gollnhuber's T3 Office](https://github.com/felixgollnhuber/t3-office).
 
-## Open your own office
+## First visit
 
 Requires Node.js 22.18 or newer; Node 24 recommended.
 
 ```sh
 npm ci
+npm run dev
+```
+
+Open http://localhost:5173. Start in your original full-screen office; no account or AI provider is required. **Show me around** starts the optional first-user guide. Click a coworker to customize it, or open **People & chat → Friends** to create a local account and invite someone. Open the invitation in a private window to try a second account. Accounts created on this normal server persist in ignored `.local/building.sqlite`; passwords need at least12 characters and there is no account recovery yet.
+
+The default service disables private T3 data routes. Accepting an invitation grants only its stated office scope; human conversations still require the host to open the room, admit the guest and each participant to enter explicitly. The guide does not create invitations, grant access or publish activity for you. Pause/resume, Skip and replay are available; guide hints store only step/timestamp/pause state in this browser session.
+
+## Connect your own local T3 agents
+
+```sh
 npm run local
 ```
 
-Open http://localhost:5173. You start directly in your own full-screen office with the original HUD, characters, interactions, themes, music and usage views. No building account or dashboard is required. The local launcher explicitly enables the read-only T3 connection on loopback. If T3 Code is unavailable, the original simulation is used.
+Open http://localhost:5173. The local launcher explicitly enables the read-only T3 connection on loopback. The original HUD, characters, interactions, themes, music and usage views remain. If T3 Code is unavailable, the original simulation is used. Do not expose this private companion to other computers; use the explicit publication bridge below.
 
 For a guaranteed simulated office, use `/?source=demo&weather=clear`. To use another port: `npm run local -- --port 5174`. The untouched upstream revision is b14eb1c1f02933df071f62f32f79ed954dceadd8; its license and source provenance are preserved. The original reference README is [here](docs/upstream-readme.md).
 
@@ -91,15 +101,15 @@ This is a disposable, loopback-only demo with automatically signed-in synthetic 
 
 ## Build together, celebrate, and take a tour
 
-The original office remains home. Open **Friends & characters** and choose:
+The original office remains home. Open **Friends & characters → More tools** and choose:
 
 - **Build together**: start a 25- or 50-minute focus session, or explicitly join an invited friend's session. Joining shares your chosen display name and quiet preference with the host and joined participants. Close the panel to work in your office; its small timer stays visible and can reopen the session. Quiet mode suppresses the gentle halfway check-in. Leave or end the session when finished.
 - **We shipped**: enter a short milestone, preview the audience/text, then explicitly publish to activity guests. Nothing is read from your agents or published automatically. Activity-granted friends also see the latest moment and a celebration lantern on your building floor. Owners can delete a moment or preview/download a safe PNG card; the export contains only the chosen title, kind, display name and date. A moment is owner-reported, not independent proof of completion. No upload occurs.
-- **Take a tour**: replay the short guided visit. You control every join/publication; Skip is always available. Reduced motion follows your system preference.
+- **Take a tour**: replay the first-user guide: welcome, optional coworker customization, invitation, admitted visit, walking/chat and privacy controls. It follows your choices and does not create invitations, admit people or publish work. Continue later, Skip, keyboard controls and reduced motion are supported.
 
 Focus sessions and moments use your optional building account. The existing invitation grant controls who can discover/join your session; only activity guests see moments. Joining is always a separate choice. Revocation removes membership and access; regranting does not rejoin. Sessions expire on server time, and moments retain for seven days with at most 20 per office/feed. Stopping agent activity sharing does not end a session or delete a moment—use those explicit controls.
 
-For the full two-office first tour, run `npm run demo:friends` and open [the guided simulation](http://127.0.0.1:5175/preview/tour). This loopback-only launcher uses disposable synthetic identities, preaccepted demo invitations, Maya's simulated focus session and one simulated moment. Normal app routes never automatically sign in or create consent. The tour is user-paced; “30-second tour” is an invitation to explore, not a forced timer.
+For the full two-office first tour, run `npm run demo:friends` and open [the guided simulation](http://127.0.0.1:5175/preview/tour). This loopback-only launcher uses disposable synthetic identities and preaccepted demo invitations. Maya is explicitly scripted: she admits demo visit requests and sends a generic reply. Normal app routes never automatically sign in, accept invitations or create consent. The tour is user-paced and has no forced timer.
 
 Verification: `npm test`, `npm run build`, `npm run test:e2e` (including the social browser checks), and `npm run test:tour`. `npm run test:social` runs just the synthetic multi-user social flow. No real private provider data is required.
 
@@ -113,7 +123,7 @@ Open **Friends & characters → Doorbell** to let invited friends request to joi
 
 `npm run test:doorbell` runs the synthetic two-user browser checks. It is also included in `npm run test:e2e`.
 
-In the disposable demo, [Simulate a doorbell](http://127.0.0.1:5175/preview/doorbell) enables simulated Maya's doorbell; she automatically accepts valid demo rings. This behavior is confined to the demo launcher. If you already joined her focus session during the tour, leave that session before trying a new ring.
+In the disposable demo, [Simulate a doorbell](http://127.0.0.1:5175/preview/doorbell) enables simulated Maya's doorbell; she automatically accepts valid demo rings. This behavior is confined to the demo launcher. If you already joined her focus session through Build together, leave it before trying a new ring.
 
 ## Human avatars, office conversations and walking
 
@@ -136,3 +146,9 @@ Messages are limited to 500 characters, one per second and twenty per minute. Ro
 Open **People & chat → Friends**. **Invite a friend** creates a presence-only invitation; copy its link. The recipient uses **Have an invite? → Add friend** in the same panel. Activity sharing remains a separate explicit choice under account/office settings.
 
 Choose **Open & join my office** to accept visit requests and appear in your office in one action. Friends ring from their office card; you admit them and they choose to walk in. This does not bypass admission. **Visit settings** contains closing/DND; **People in this room** contains removal. Your avatar is under **You**. The original menu keeps focus, milestones, tour and doorbell under **More tools**. The synthetic preview's five shortcuts are under **Demo shortcuts**.
+
+## Identity and cloud preparation
+
+The tested GitHub identity adapter is a disabled integration foundation, not an available sign-in option. No GitHub app, real authorization or cloud service has been provisioned. [Identity/cloud preparation](docs/identity-cloud.md) records the verified local adapter, activation requirements and proposed Cloudflare boundary. Local accounts continue to work independently.
+
+For the complete first-user verification locally, run `npm run test:onboarding`. It covers real two-browser setup, a scripted one-person demo, recovery/account races, keyboard/phone layouts and all four themes. `npm run test:tour` runs the fresh-account journey alone; `npm run test:onboarding:demo` runs the disposable scripted visit. These use synthetic accounts and isolated databases. No remote browser CI run is claimed.

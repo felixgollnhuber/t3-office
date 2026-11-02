@@ -60,7 +60,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
   url.searchParams.set('theme', settings.get('theme'));
   const invite = new URLSearchParams(location.hash.slice(1)).get('invite');
   if (invite) {
-    url.hash = new URLSearchParams({ invite }).toString();
+    sessionStorage.setItem('building.invitation', invite);url.hash = '';
     history.replaceState(null, '', location.pathname + location.search);
   } else url.hash = '';
   frame.src = url.href;
@@ -69,10 +69,12 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
   buildingButton.addEventListener('click', () => { window.dispatchEvent(new Event('office-building-open')); dialog.close(); void import('./building-view').then(({ openBuildingView }) => openBuildingView(() => dialog.showModal(), renderHost)); });
   document.body.append(buildingButton);
   if (new URLSearchParams(location.search).get('building') === '1') window.addEventListener('office-ready', () => { const next = new URL(location.href); next.searchParams.delete('building'); history.replaceState(null, '', next); buildingButton.click(); }, { once: true });
+  window.addEventListener('office-onboarding-customize',()=>{const first=source.threads()[0];if(first&&!shared)selectCharacter?.(first.id);});
   window.addEventListener('office-open-social', (event) => { const tab = (event as CustomEvent).detail?.tab; void openSocial(tab === 'moments' ? 'moments' : 'focus'); });
-  window.addEventListener('office-social-account', () => { window.dispatchEvent(new Event('office-building-close')); dialog.showModal(); });
-  button.addEventListener('click', () => dialog.showModal());
-  floating.addEventListener('click', () => dialog.showModal());
+  window.addEventListener('office-social-account', () => { window.dispatchEvent(new Event('office-building-close')); openAccountMenu(); });
+  const openAccountMenu=()=>{frame.contentWindow?.postMessage({type:'office-refresh-account'},location.origin);dialog.showModal();};
+  button.addEventListener('click', openAccountMenu);
+  floating.addEventListener('click', openAccountMenu);
   dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
   const send = (data: unknown) => frame.contentWindow?.postMessage(data, location.origin);
   const localCharacters = () => source.threads().map((t) => ({ id: t.id, name: t.name, provider: t.provider, status: t.status, area: profiles[t.id]?.area ?? 'general', ...(t.characterStyle ? { style: t.characterStyle } : {}) }));
@@ -185,7 +187,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
     }
   });
   window.addEventListener('pagehide', () => { publisherGeneration++; clearInterval(profileTimer); clearInterval(publishing); publishing = undefined; pending = false; });
-  if (invite) dialog.showModal();
+  if (invite) window.addEventListener('office-ready',()=>window.dispatchEvent(new CustomEvent('office-open-people',{detail:{tab:'visits',invite}})),{once:true});
   // A hint contains no identity or content; the service must revalidate before showing the timer.
   if (sessionStorage.getItem('office.focus-active.v1') === '1') { social ??= import('./social').then(({ installSocialOffice }) => installSocialOffice()); }
   if(new URLSearchParams(location.search).get('doorbell')==='1')window.addEventListener('office-ready',()=>{void openBell();},{once:true});

@@ -167,7 +167,7 @@ async function main() {
     if (id === 'boss') return hud!.toast(TXT.bossBusy);
     if (world.workers.has(id) || isBoss(id)) focusAgent(id);
   };
-  const inspector = new AgentInspector(source, world, () => clock.now(), shared ? undefined : new CharacterEditor(source, world, () => { closeFocus(); homeView(); hud!.toast(B.characterSaved); }));
+  const inspector = new AgentInspector(source, world, () => clock.now(), shared ? undefined : new CharacterEditor(source, world, () => { closeFocus(); homeView(); hud!.toast(B.characterSaved); window.dispatchEvent(new CustomEvent('office-onboarding-progress',{detail:{type:'character-saved'}})); }));
   const tagMode = () => (settings.get('tags') === 'auto' ? (theme.tagMode ?? 'full') : (settings.get('tags') as 'full' | 'quiet'));
   const tags = new Tags(tagMode(), (id) => {
     noteClick({ kind: 'agent', id, name: '' });

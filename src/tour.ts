@@ -1,94 +1,76 @@
-/** A short, optional walk through the real office controls. No account or data is fabricated here. */
-import { travelToFloor } from './elevator';
-import { api, type Floor } from './building-api';
+/** Contextual first visit. Guides explicit actions; never creates accounts, grants or publications. */
 import { locale } from './i18n';
 import './tour.css';
-const KEY = 'office.guided-tour.v1';
-const T = locale({
-  en: { label: 'Your first visit', skip: 'Skip tour', restart: 'Take a tour', next: 'Continue', done: 'Make yourself at home', loading: 'Opening…', unavailable: 'That floor is no longer available. You can still explore your office.',
-    titles: ['An office of your own', 'Good company, upstairs', 'A visit by invitation', 'Build together', 'Small wins deserve a moment', 'Your work stays yours'],
-    text: ['Your AI coworkers live here. Click a character to rename and style it. Your original office is always home.', 'The building contains only your floor and offices shared with you. Select a friend’s floor to look closer.', 'Enter a friend’s office without seeing their prompts, files, transcripts or costs. Every visit requires their permission.', 'Join a 25- or 50-minute focus session. Joining shares your chosen name with the host and other participants; quiet mode keeps it low-key.', 'Preview a milestone before publishing it to your activity guests. Export only the approved card, never a screenshot of private work.', 'Return home, invite someone you trust, and choose what to share. Nothing in this tour starts activity publishing.'],
-    actions: ['Show me the building', 'Focus a friend’s floor', 'Visit this office', 'Try a focus session', 'Preview a milestone', 'Finish tour'], noFriends: 'There are no invited floors yet. Open Friends to create or accept an invitation. The two-office demo includes a simulated friend.', invite: 'Open Friends', back: 'Back', simulation: 'SIMULATION · guided first visit', progress: (n: number) => `Step ${n} of 6`,
-  },
-  de: { label: 'Dein erster Besuch', skip: 'Tour überspringen', restart: 'Tour starten', next: 'Weiter', done: 'Fühl dich wie zu Hause', loading: 'Wird geöffnet…', unavailable: 'Diese Etage ist nicht mehr verfügbar. Dein Büro bleibt zugänglich.',
-    titles: ['Ein eigenes Büro', 'Gute Gesellschaft nebenan', 'Ein Besuch auf Einladung', 'Gemeinsam arbeiten', 'Kleine Erfolge teilen', 'Deine Arbeit bleibt deine'],
-    text: ['Hier leben deine KI-Kollegen. Klicke eine Figur an, um Namen und Aussehen zu ändern. Dein ursprüngliches Büro bleibt dein Zuhause.', 'Das Gebäude zeigt nur deine Etage und mit dir geteilte Büros. Wähle eine Etage, um näher hinzusehen.', 'Besuche Freunde, ohne ihre Prompts, Dateien, Gespräche oder Kosten zu sehen. Jeder Besuch braucht eine Erlaubnis.', 'Tritt einer 25- oder 50-Minuten-Fokusrunde bei. Dabei sehen Gastgeber und Teilnehmer deinen gewählten Namen. Der Ruhemodus hält es entspannt.', 'Prüfe einen Meilenstein, bevor du ihn mit Aktivitätsgästen teilst. Exportiere nur die freigegebene Karte, niemals private Arbeit.', 'Kehre heim, lade vertraute Menschen ein und entscheide, was du teilst. Diese Tour startet keine Aktivitätsfreigabe.'],
-    actions: ['Zeig mir das Gebäude', 'Etage eines Freundes wählen', 'Dieses Büro besuchen', 'Fokusrunde ausprobieren', 'Meilenstein ansehen', 'Tour beenden'], noFriends: 'Noch keine eingeladenen Etagen. Öffne Freunde, um eine Einladung zu erstellen oder anzunehmen. Die Demo enthält einen simulierten Freund.', invite: 'Freunde öffnen', back: 'Zurück', simulation: 'SIMULATION · erste Führung', progress: (n: number) => `Schritt ${n} von 6`,
-  },
+const KEY='office.onboarding.v1',SEEN='office.welcome.v1';
+const T=locale({
+ en:{label:'Make yourself at home',welcome:'Your office is ready',intro:'Your characters are AI coworkers. Invite friends when you are ready.',start:'Show me around',skip:'Skip tour',later:'Continue later',resume:'Continue setup',done:'Finish tour',back:'Back',next:'Continue',optional:'Skip customization',privacy:'Only explicit choices share information. The guide never publishes your work.',
+ titles:['An office of your own','Make it yours','Invite a friend','Welcome them in','Walk and talk','You stay in control'],
+ text:['Your AI coworkers live here. You can use this office without an account.','Click a coworker to change their name or look. This is optional and stays local until you choose to share.','Create a local account only when you want friends. Make an invitation, or accept one you received, in the Friends panel.','Open & join your office to receive requests. Admit your friend, then let them choose to enter. Visiting a friend? Ring at their office.','Enter a conversation to share your human avatar and position. Send a greeting, or turn on Walk and tap open floor.','Leave room stops your presence. Visit settings contains Do Not Disturb and closing; Account & office settings lets you revoke access.'],
+ actions:['Continue','Customize a coworker','Open Friends','Open Friends','Open conversation','Show visit controls'],waiting:'Your invitation is ready. Your friend still needs to accept, request a visit and be admitted.',requested:'Request sent. Wait for the host to admit you; then choose Walk into office.',admitted:'Your guest is admitted. They choose when to enter.',inline:['','','Create an account below, then invite a friend or accept an invitation.','Open your office below. Admit incoming requests, or ring at a friend’s office.','Send a greeting below, or turn on Walk to move.','Leave room stops presence. Visit controls contain Do Not Disturb, closing and access settings.'],progress:(n:number)=>`Step ${n} of 6`},
+ de:{label:'Fühl dich wie zu Hause',welcome:'Dein Büro ist bereit',intro:'Deine Figuren sind KI-Kollegen. Lade Freunde ein, wenn du bereit bist.',start:'Zeig es mir',skip:'Tour überspringen',later:'Später fortsetzen',resume:'Einrichtung fortsetzen',done:'Tour beenden',back:'Zurück',next:'Weiter',optional:'Anpassung überspringen',privacy:'Nur ausdrückliche Entscheidungen teilen Daten. Die Tour veröffentlicht keine Arbeit.',
+ titles:['Ein eigenes Büro','Mach es zu deinem','Freund einladen','Willkommen heißen','Gehen und sprechen','Du behältst die Kontrolle'],
+ text:['Hier leben deine KI-Kollegen. Du brauchst kein Konto für dein Büro.','Klicke einen Kollegen an, um Namen oder Aussehen zu ändern. Das ist optional und bleibt lokal, bis du etwas teilst.','Erstelle ein lokales Konto erst für Freunde. Erstelle oder akzeptiere eine Einladung im Freunde-Bereich.','Öffne dein Büro und tritt bei, um Anfragen zu erhalten. Lass deinen Freund zu; er entscheidet selbst, wann er eintritt. Bei Freunden klingelst du am Büro.','Ein Gespräch teilt deinen menschlichen Avatar und Standort. Sende einen Gruß oder aktiviere Gehen und tippe auf freien Boden.','Raum verlassen beendet deine Anwesenheit. Besuchseinstellungen enthalten Nicht stören und Schließen; unter Konto & Büroeinstellungen widerrufst du Zugriff.'],
+ actions:['Weiter','Kollegen anpassen','Freunde öffnen','Freunde öffnen','Gespräch öffnen','Besuchseinstellungen zeigen'],waiting:'Einladung bereit. Dein Freund muss sie annehmen, einen Besuch anfragen und zugelassen werden.',requested:'Anfrage gesendet. Warte auf Zustimmung, dann wähle Büro betreten.',admitted:'Dein Gast ist zugelassen. Er entscheidet, wann er eintritt.',inline:['','','Erstelle unten ein Konto und lade Freunde ein oder nimm eine Einladung an.','Öffne unten dein Büro. Lass Anfragen zu oder klingle bei Freunden.','Sende unten einen Gruß oder aktiviere Gehen.','Raum verlassen beendet Anwesenheit. Besuchseinstellungen enthalten Nicht stören, Schließen und Zugriff.'],progress:(n:number)=>`Schritt ${n} von 6`}
 });
-type Ticket = { step: number; at: number; floor?: string };
-export function installOfficeTour() {
-  let ticket: Ticket | null = null; let busy = false; let generation = 0; let message = ''; 
-  const card = document.createElement('section'); card.className = 'office-tour'; card.setAttribute('aria-label', T.label); card.hidden = true;
-  document.body.append(card);
-  const save = () => { if (ticket) sessionStorage.setItem(KEY, JSON.stringify(ticket)); else sessionStorage.removeItem(KEY); };
-  const stop = () => { generation++; ticket = null; save(); card.hidden = true; const u = new URL(location.href); u.searchParams.delete('tour'); history.replaceState(null, '', u); };
-  const paint = () => {
-    if (!ticket) { card.hidden = true; return; }
-    const container = document.querySelector('.building-world') ?? document.body; if (card.parentElement !== container) container.append(card);
-    const s = ticket.step; card.hidden = false; card.dataset.step = String(s);
-    card.replaceChildren();
-    const header = document.createElement('header'); const eyebrow = document.createElement('small'); eyebrow.textContent = document.getElementById('friend-preview-banner') ? T.simulation : T.label;
-    const skip = document.createElement('button'); skip.textContent = T.skip; skip.dataset.tourAction = 'skip'; header.append(eyebrow, skip);
-    const progress = document.createElement('p'); progress.className = 'tour-progress'; progress.textContent = T.progress(s + 1);
-    const title = document.createElement('h2'); title.textContent = T.titles[s];
-    const text = document.createElement('p'); text.textContent = message || T.text[s]; text.setAttribute('role', 'status');
-    const actions = document.createElement('footer'); const next = document.createElement('button'); next.dataset.tourAction = 'next'; next.textContent = busy ? T.loading : T.actions[s]; next.disabled = busy;
-    if (s > 0) { const back = document.createElement('button'); back.dataset.tourAction = 'back'; back.textContent = T.back; back.disabled = busy; actions.append(back); }
-    actions.append(next); card.append(header, progress, title, text, actions);
-  };
-  const setStep = (step: number) => { if (!ticket) return; ticket.step = step; ticket.at = Date.now(); save(); paint(); };
-  const start = () => { generation++; busy = false; message = ''; ticket = { step: 0, at: Date.now() }; save(); paint(); card.querySelector<HTMLButtonElement>('[data-tour-action=next]')?.focus(); };
-  // Allow the actual scene to finish its asynchronous directory request without an unbounded poll.
-  const waitFor = (selector: string) => new Promise<HTMLElement>((resolve, reject) => {
-    const immediate = document.querySelector<HTMLElement>(selector); if (immediate) return resolve(immediate);
-    const observer = new MutationObserver(() => { const el = document.querySelector<HTMLElement>(selector); if (el) { observer.disconnect(); clearTimeout(timer); resolve(el); } });
-    const timer = setTimeout(() => { observer.disconnect(); reject(new Error(T.unavailable)); }, 7500);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
-  });
-  card.addEventListener('click', event => {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-tour-action]'); if (!button) return;
-    if (button.dataset.tourAction === 'skip') return stop();
-    if (!ticket || busy) return;
-    if (button.dataset.tourAction === 'back') return setStep(Math.max(0, ticket.step - 1));
-    const epoch = generation; const step = ticket.step; message = '';
-    busy = true; paint();
-    void (async () => {
-      if (step === 0) { document.querySelector<HTMLButtonElement>('.office-building-launcher')?.click(); await waitFor('.building-world[data-rendered=true]'); if (epoch === generation) setStep(1); }
-      else if (step === 1) {
-        let friend: Floor | undefined;
-        try { friend = (await api<{ floors: Floor[] }>('/floors')).floors.find(f => !f.isOwner); } catch { /* Optional accounts: guide to invitations. */ }
-        if (epoch !== generation || !ticket) return;
-        if (!friend) { message = T.noFriends; window.dispatchEvent(new Event('office-building-close')); window.dispatchEvent(new Event('office-social-account')); setStep(5); return; }
-        ticket.floor = friend.id;
-        const floor = await waitFor(`.building-world [data-floor="${CSS.escape(friend.id)}"]`);
-        if (epoch !== generation) return; floor.click(); setStep(2);
-      } else if (step === 2) {
-        if (!document.querySelector('.building-world')) document.querySelector<HTMLButtonElement>('.office-building-launcher')?.click();
-        await waitFor('.building-world[data-rendered=true]');
-        if (ticket?.floor) { const floor = await waitFor(`.building-world [data-floor="${CSS.escape(ticket.floor)}"]`); floor.click(); }
-        const enter = await waitFor('.building-world-enter');
-        if (epoch !== generation || !ticket) return;
-        // Save before navigation: the next page resumes only this short-lived tour, never publishes data.
-        ticket.step = 3; ticket.at = Date.now(); save(); enter.click();
-      } else if (step === 3 || step === 4) {
-        window.dispatchEvent(new Event('office-building-close'));
-        window.dispatchEvent(new CustomEvent('office-open-social', { detail: { tab: step === 3 ? 'focus' : 'moments' } })); setStep(step + 1);
-      } else { stop(); if (new URLSearchParams(location.search).get('source') === 'shared') void travelToFloor(null); }
-    })().catch(() => { if (epoch === generation) { message = T.unavailable; paint(); } }).finally(() => { busy = false; if (epoch === generation && ticket) paint(); });
-  });
-  for (const kind of ['pointerdown','pointerup','wheel','dblclick'] as const) card.addEventListener(kind, event => event.stopPropagation());
-  card.addEventListener('keydown', event => { if (event.key !== 'Tab' && event.key !== 'Escape') event.stopPropagation(); });
-  window.addEventListener('office-start-tour', start);
-  window.addEventListener('pagehide', () => { generation++; card.remove(); });
-  const resume = async () => {
-    const epoch = generation;
-    const transitions = document.body.getAnimations();
-    if (!matchMedia('(prefers-reduced-motion: reduce)').matches && transitions.length) await Promise.race([Promise.allSettled(transitions.map(a => a.finished)), new Promise(resolve => setTimeout(resolve, 3000))]);
-    if (epoch !== generation || !card.isConnected) return;
-    try { const value = JSON.parse(sessionStorage.getItem(KEY) ?? 'null'); if (value && Number.isInteger(value.step) && value.step >= 0 && value.step < 6 && Date.now() - value.at < 10 * 60_000 && Date.now() >= value.at) ticket = value; } catch { sessionStorage.removeItem(KEY); }
-    if (new URLSearchParams(location.search).get('tour') === '1' && !ticket) start(); else paint();
-  };
-  if ((window as unknown as { __ready?: boolean }).__ready) resume(); else window.addEventListener('office-ready', resume, { once: true });
-  return { start, stop };
+type Ticket={step:number;at:number;paused:boolean};
+const read=(key:string)=>{try{return sessionStorage.getItem(key);}catch{return null;}};
+export function installOfficeTour(){
+ let ticket:Ticket|null=null,message='',generation=0;
+ const card=document.createElement('section');card.className='office-tour';card.hidden=true;card.setAttribute('aria-label',T.label);document.body.append(card);
+ const welcome=document.createElement('aside');welcome.className='office-welcome';welcome.hidden=true;welcome.setAttribute('aria-label',T.welcome);
+ const heading=document.createElement('b'),hint=document.createElement('p'),startButton=document.createElement('button'),dismiss=document.createElement('button');
+ heading.textContent=T.welcome;hint.textContent=T.intro;startButton.textContent=T.start;startButton.dataset.onboarding='start';dismiss.textContent='×';dismiss.setAttribute('aria-label',T.skip);dismiss.dataset.onboarding='dismiss';welcome.append(heading,hint,startButton,dismiss);document.body.append(welcome);
+ const markSeen=()=>{try{localStorage.setItem(SEEN,'1');}catch{/* Browser privacy settings must not block the office. */}};
+ const save=()=>{try{if(ticket)sessionStorage.setItem(KEY,JSON.stringify(ticket));else sessionStorage.removeItem(KEY);}catch{/* Session-only guide when storage is blocked. */}};
+ const moveCard=()=>{const panel=document.querySelector<HTMLElement>('.human-panel:not([hidden])');const inDialog=!!document.querySelector('dialog[open]');const parent=panel&&!inDialog?panel:document.body;if(card.parentElement!==parent){if(parent===panel)parent.insertBefore(card,parent.querySelector('main'));else parent.append(card);}card.classList.toggle('in-people',parent===panel);};
+ const contextKey=()=>{const p=document.querySelector('.human-panel:not([hidden])');return p?p.querySelector('[data-tab][aria-pressed=true]')?.getAttribute('data-tab')??'panel':'office';};
+ const paint=()=>{
+  if(!ticket||ticket.paused){card.hidden=true;if(ticket?.paused){welcome.hidden=false;heading.textContent=T.label;hint.textContent=T.text[ticket.step];startButton.textContent=T.resume;}return;}
+  layout=contextKey();welcome.hidden=true;card.hidden=false;moveCard();card.dataset.step=String(ticket.step);card.replaceChildren();
+  const inline=(ticket.step===2||ticket.step===3||ticket.step===5)?contextKey()==='visits':ticket.step===4&&contextKey()==='chat';
+  card.classList.toggle('compact-guide',card.classList.contains('in-people'));
+  const header=document.createElement('header'),progress=document.createElement('small'),skip=document.createElement('button'),title=document.createElement('h2'),text=document.createElement('p'),footer=document.createElement('footer');
+  progress.textContent=T.progress(ticket.step+1);skip.textContent=T.skip;skip.dataset.tourAction='skip';title.textContent=T.titles[ticket.step];text.textContent=message||((card.classList.contains('in-people')&&ticket.step>=2)?T.inline[ticket.step]:T.text[ticket.step]);text.setAttribute('role','status');header.append(progress,skip);
+  if(ticket.step>0&&!card.classList.contains('in-people')){const back=document.createElement('button');back.textContent=T.back;back.dataset.tourAction='back';footer.append(back);}
+  const primary=document.createElement('button');primary.className='guide-primary';primary.textContent=inline&&ticket.step===4?T.next:inline&&ticket.step===5?T.done:T.actions[ticket.step];primary.dataset.tourAction=inline&&ticket.step===4?'continue':inline&&ticket.step===5?'finish':'next';if(!inline||ticket.step>=4)footer.append(primary);
+  if(ticket.step>0&&!(inline&&ticket.step>=4)){const secondary=document.createElement('button');secondary.textContent=ticket.step===1?T.optional:ticket.step===5?T.done:ticket.step===4?T.next:T.later;secondary.dataset.tourAction=ticket.step===1?'customize-skip':ticket.step===5?'finish':ticket.step===4?'continue':'pause';footer.append(secondary);}
+  card.append(header,title,text,footer);
+ };
+ const focusOffice=()=>{(document.querySelector<HTMLButtonElement>('.human-panel:not([hidden]) [data-tab][aria-pressed=true]')??document.querySelector<HTMLButtonElement>('.human-launcher'))?.focus();};
+ const pause=()=>{if(ticket){ticket.paused=true;save();paint();focusOffice();}};
+ const finish=()=>{generation++;ticket=null;save();markSeen();card.hidden=true;welcome.hidden=true;const u=new URL(location.href);u.searchParams.delete('tour');history.replaceState(null,'',u);focusOffice();};
+ const setStep=(step:number)=>{if(!ticket)return;ticket.step=Math.max(0,Math.min(5,step));ticket.at=Date.now();message='';save();paint();};
+ const start=()=>{generation++;ticket={step:0,at:Date.now(),paused:false};message='';markSeen();save();paint();card.querySelector<HTMLButtonElement>('[data-tour-action=next]')?.focus();};
+ const openPeople=(tab:'visits'|'chat',controls=false)=>{window.dispatchEvent(new Event('office-building-close'));window.dispatchEvent(new CustomEvent('office-open-people',{detail:{tab,controls}}));paint();};
+ card.addEventListener('click',event=>{
+  const action=(event.target as HTMLElement).closest<HTMLElement>('[data-tour-action]')?.dataset.tourAction;if(!ticket||!action)return;event.stopPropagation();
+  if(action==='skip'||action==='finish')return finish();if(action==='back')return setStep(ticket.step-1);if(action==='customize-skip')return setStep(2);if(action==='continue')return setStep(5);
+  if(action==='pause'){pause();return;}
+  if(action!=='next')return;
+  if(ticket.step===0)setStep(1);
+  else if(ticket.step===1)window.dispatchEvent(new Event('office-onboarding-customize'));
+  else openPeople(ticket.step===4?'chat':'visits',ticket.step===5);
+ });
+ for(const kind of ['pointerdown','pointerup','pointermove','wheel','dblclick']as const)card.addEventListener(kind,event=>event.stopPropagation());
+ card.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();pause();}if(event.key!=='Tab')event.stopPropagation();});
+ welcome.addEventListener('click',event=>{const action=(event.target as HTMLElement).closest<HTMLElement>('[data-onboarding]')?.dataset.onboarding;if(action==='dismiss')finish();else if(action==='start'){if(ticket?.paused){ticket.paused=false;save();paint();}else start();}});
+ const onProgress=(event:Event)=>{
+  if(!ticket||ticket.paused)return;const {type,isOwner}=((event as CustomEvent).detail??{});
+  if(type==='character-saved'&&ticket.step===1)setStep(2);
+  else if((type==='invite-created'||type==='invite-accepted'||type==='friends-ready')&&ticket.step===2){setStep(3);if(type==='invite-created'){message=T.waiting;paint();}}
+  else if((type==='people-together'||(type==='room-entered'&&isOwner===false))&&ticket.step===3)setStep(4);
+  else if(type==='chat-sent'&&ticket.step===4)setStep(5);
+  else if(type==='visit-requested'&&ticket.step===3){message=T.requested;paint();}
+  else if(type==='guest-admitted'&&ticket.step===3){message=T.admitted;paint();}
+ };
+ window.addEventListener('office-onboarding-progress',onProgress);
+ window.addEventListener('office-start-tour',start);
+ let layout='';const observer=new MutationObserver(()=>{if(ticket&&!ticket.paused){const next=contextKey();if(next!==layout){layout=next;paint();}else moveCard();}});observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['hidden','open','aria-pressed']});
+ window.addEventListener('pagehide',event=>{generation++;save();observer.disconnect();if(!event.persisted){card.remove();welcome.remove();}});
+ window.addEventListener('pageshow',event=>{if(event.persisted){observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['hidden','open','aria-pressed']});ready();}});
+ const ready=()=>{const epoch=generation;try{const value=JSON.parse(read(KEY)??'null');if(value&&Number.isInteger(value.step)&&value.step>=0&&value.step<6&&typeof value.paused==='boolean'&&typeof value.at==='number'&&Number.isFinite(value.at)&&Date.now()-value.at<7*86_400_000&&Date.now()>=value.at)ticket={step:value.step,at:value.at,paused:value.paused};else try{sessionStorage.removeItem(KEY);}catch{}}catch{/* Discard malformed hints, never load account data. */}
+  if(epoch!==generation)return;if(new URLSearchParams(location.search).get('tour')==='1'&&!ticket)start();else if(ticket)paint();else{let seen=false;try{seen=localStorage.getItem(SEEN)==='1';}catch{}welcome.hidden=seen||new URLSearchParams(location.search).get('source')==='shared';}
+ };
+ if((window as unknown as {__ready?:boolean}).__ready)ready();else window.addEventListener('office-ready',ready,{once:true});
+ return{start,stop:finish};
 }

@@ -89,9 +89,9 @@ try {
   const area = menu(owner).locator('#invite-result textarea'); await area.waitFor(); const invite = await area.inputValue();
   assert.ok(!new URL(invite).searchParams.has('view'));
   await guest.goto(invite);
-  await guest.locator('.office-friends-dialog[open]').waitFor();
-  await register(guest, 'bobby', 'Bobby');
-  await menu(guest).locator('#accept-form button[type="submit"]').click();
+  await guest.locator('.human-auth').waitFor();
+  await guest.locator('.human-auth input[name=name]').fill('Bobby');await guest.locator('.human-auth input[name=handle]').fill('bobby');await guest.locator('.human-auth input[name=password]').fill('synthetic-test-password');await guest.locator('.human-auth button[type=submit]').click();
+  await guest.locator('[data-human=accept-incoming]').click();await guest.locator('[data-view-office]').click();
   await guest.waitForURL(/source=shared/);
   console.log('PASS: invitation accepted and shared floor opened.');
   await guest.waitForFunction(() => window.__source?.threads().some((t) => t.name === 'Cody' && t.workArea === 'Frontend'));

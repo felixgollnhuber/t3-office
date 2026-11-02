@@ -202,6 +202,11 @@ root.addEventListener('click', (event) => {
 window.addEventListener('message', (event) => {
   if (event.origin !== location.origin || event.source !== parent) return;
   const data = event.data;
+  if(data?.type==='office-refresh-account'){
+    const epoch=generation,previousInvite=invitation;invitation=sessionStorage.getItem('building.invitation')??'';
+    const field=root.querySelector<HTMLInputElement>('#accept-form input');if(field&&field.value===previousInvite)field.value=invitation;
+    void (async()=>{try{const next=await api<Session>('/session');if(epoch!==generation)return;const changed=session?.user.id!==next.user.id;session=next;if(changed){generation++;render();}if(tab==='friends')void refreshFriends();}catch(error){if(epoch!==generation)return;if(error instanceof ApiError&&error.status===401){if(session){generation++;session=null;render();}}else notice(B.genericError,true);}})();return;
+  }
   if (data?.type === 'office-appearance-state' && isAppearance(data.appearance)) { appearance = data.appearance; if (!appearanceReady && tab === 'style') render(); appearanceReady = true; }
   else if (data?.type === 'office-current-floor') { currentFloor = typeof data.id === 'string' ? data.id : null; }
   else if (data?.type === 'office-local-characters') { const changed = local !== data.local; local = data.local; localCharacters = data.characters; if (changed && tab === 'style') render(); if (tab === 'characters' && local) renderCharacters(localCharacters); }

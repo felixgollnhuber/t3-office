@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const checking = process.argv.includes('--check');
 const browserCheck = process.argv.includes('--check-browser');
 const tourCheck = process.argv.includes('--check-tour');
+if (tourCheck) { await import('./onboarding-test.mjs'); process.exit(0); }
 const index = process.argv.indexOf('--port');
 const port = checking || browserCheck || tourCheck ? 0 : index < 0 ? 5175 : Number(process.argv[index + 1]);
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Choose a valid local port.');
@@ -30,8 +31,9 @@ if (window === parent) {
  const bar = document.createElement('aside'); bar.id = 'friend-preview-banner';
  bar.style.cssText = 'position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:9990;background:#f8f3de;color:#263a34;border:2px solid #263a34;padding:10px 14px;font:14px monospace;max-width:94vw;box-sizing:border-box;display:flex;gap:12px;flex-wrap:wrap;justify-content:center';
  const label = document.createElement('span'); label.textContent = location.search.includes('source=shared') ? 'SIMULATION · Visiting Maya’s office' : 'SIMULATION · Your office · no real activity';
+ if(new URLSearchParams(location.search).has('tour'))label.textContent='SIMULATION · Guided visit · Maya is scripted';
  const visit = document.createElement('a'); visit.href='/preview/visit'; visit.textContent='Visit Maya';
- const tour = document.createElement('a'); tour.href='/preview/tour'; tour.textContent='30-second tour';
+ const tour = document.createElement('a'); tour.href='/preview/tour'; tour.textContent='First visit guide';
  const bell = document.createElement('a'); bell.href='/preview/doorbell'; bell.textContent='Simulate a doorbell';
  if(new URLSearchParams(location.search).has('doorbell'))label.textContent='SIMULATION · Maya automatically accepts demo rings';
  const people=document.createElement('a');people.href='/preview/people';people.textContent='Meet simulated Maya';
@@ -58,6 +60,7 @@ const server = await createServer({
       if (req.method !== 'GET') { res.statusCode = 405; res.end(); return; }
       res.setHeader('Cache-Control', 'no-store');
       if (!visitorCookie) { res.statusCode = 503; res.end('Preparing synthetic building…'); return; }
+      if(path==='/preview/tour'){void preparePeople().then(()=>{res.setHeader('Set-Cookie',`${visitorCookie}; Path=/; HttpOnly; SameSite=Strict`);res.statusCode=302;res.setHeader('Location','/?source=demo&agents=6&weather=clear&tour=1');res.end();}).catch(()=>{res.statusCode=503;res.end('Preparing guided simulation…');});return;}
       if(path==='/preview/people'){void preparePeople().then(()=>{res.setHeader('Set-Cookie',`${visitorCookie}; Path=/; HttpOnly; SameSite=Strict`);res.statusCode=302;res.setHeader('Location',`/?source=shared&floor=${floorId}&weather=clear&people=1`);res.end();}).catch(()=>{res.statusCode=503;res.end('Preparing simulated human office…');});return;}
       if(path==='/preview/doorbell'){void prepareDoorbell().then(()=>{res.setHeader('Set-Cookie',`${visitorCookie}; Path=/; HttpOnly; SameSite=Strict`);res.statusCode=302;res.setHeader('Location','/?source=demo&agents=6&weather=clear&doorbell=1');res.end();}).catch(()=>{res.statusCode=503;res.end('Synthetic doorbell unavailable.');});return;}
       // Automatic sign-in is deliberately confined to this disposable demo server.
@@ -137,6 +140,7 @@ try {
     assert.equal(entry.status, 302); assert.ok(entry.headers.get('set-cookie')?.includes('HttpOnly'));
     const floors = await call('/floors', undefined, visitorCookie); assert.equal(floors.data.floors.length, 2);
     if (browserCheck) {
+      interval=setInterval(()=>{void publish().catch(error=>console.error('Synthetic preview heartbeat failed:',error.message));},8000);
       const { chromium } = await import('playwright');
       browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-webgl'] });
       const page = await browser.newPage({ viewport: { width: 1100, height: 760 } });
@@ -151,7 +155,7 @@ try {
       await menu.locator('#floor-list .floor').nth(1).waitFor();
       assert.equal(await menu.locator('#floor-list .floor').count(), 2);
       await menu.getByRole('button', { name: 'Close', exact: true }).click();
-      await page.getByRole('link', { name: 'Your demo office', exact: true }).click();
+      await page.getByText('Demo shortcuts',{exact:true}).click();await page.getByRole('link', { name: 'Your demo office', exact: true }).click();
       await page.waitForURL(url => !url.searchParams.has('floor'));
       await page.waitForFunction(() => window.__source?.threads().length >= 6 && !document.body.classList.contains('shared-office')); 
       await page.locator('.elevator-overlay').waitFor({ state: 'detached' });
@@ -203,58 +207,6 @@ try {
       await page.getByText('Accepted',{exact:true}).waitFor({timeout:12000});await page.locator('.social-focus-badge').waitFor();
       await page.screenshot({path:'shots/doorbell-real-office.png',timeout:60000});
       assert.deepEqual(errors, []);
-    }
-    if (tourCheck) {
-      // Keep the synthetic host online throughout slow screenshot runs; retain real freshness enforcement.
-      interval = setInterval(() => { void publish().catch(error => console.error('Synthetic tour heartbeat failed:', error.message)); }, 8000);
-      const { chromium } = await import('playwright');
-      browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-webgl'] });
-      const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', acceptDownloads: true });
-      const errors = []; page.on('pageerror', e => errors.push(e.message));
-      await page.goto(`${base}preview/tour`); await page.waitForFunction(() => window.__ready);
-      await page.locator('.office-tour[data-step="0"]').waitFor();
-      await page.screenshot({ path: 'shots/tour-welcome.png', timeout: 60000 });
-      await page.locator('[data-tour-action=next]').click(); await page.locator('.office-tour[data-step="1"]').waitFor();
-      await page.locator('[data-tour-action=next]').click(); await page.locator('.office-tour[data-step="2"]').waitFor();
-      assert.equal(await page.locator('.building-world').getAttribute('data-selected-floor'), floorId);
-      await page.screenshot({ path: 'shots/tour-building.png', timeout: 60000 });
-      await page.locator('[data-tour-action=next]').click(); await page.waitForURL(u => u.searchParams.get('floor') === floorId);
-      await page.waitForFunction(() => window.__ready); await page.locator('.elevator-overlay').waitFor({ state: 'detached' });
-      await page.locator('.office-tour[data-step="3"]').waitFor();
-      await page.locator('[data-tour-action=next]').click(); await page.locator('.social-office[open] [data-join]').waitFor();
-      assert.equal((await call('/social', undefined, visitorCookie)).data.sessions[0].joined, false);
-      await page.locator('[data-join]').click(); await page.locator('[data-leave]').waitFor();
-      await page.screenshot({ path: 'shots/tour-focus.png', timeout: 60000 });
-      await page.locator('[data-social=close]').click(); await page.locator('.social-focus-badge').waitFor();
-      await page.locator('.office-tour[data-step="4"]').waitFor(); await page.locator('[data-tour-action=next]').click();
-      await page.locator('.social-moment-form input[name=title]').fill('We built our first floor · simulation');
-      await page.locator('.social-moment-form button[type=submit]').click(); await page.locator('.social-publication-preview').waitFor();
-      assert.equal((await call('/social', undefined, visitorCookie)).data.moments.filter(m => m.isOwner).length, 0, 'Tour preview must not publish');
-      await page.screenshot({ path: 'shots/tour-moment-preview.png', timeout: 60000 });
-      await page.locator('[data-social=publish]').click(); await page.locator('[data-moment] [data-export]').waitFor();
-      await page.locator('[data-export]').click(); await page.locator('.social-export canvas').waitFor();
-      await page.screenshot({ path: 'shots/tour-share-card.png', timeout: 60000 });
-      const cardImage = await page.locator('.social-export canvas').evaluate(c => c.toDataURL('image/png').split(',')[1]);
-      await writeFile('shots/t3-office-moment-card.png', Buffer.from(cardImage, 'base64'));
-      await page.locator('[data-social=close]').click(); await page.locator('.office-tour[data-step="5"]').waitFor();
-      await page.locator('[data-tour-action=next]').click(); await page.waitForURL(u => !u.searchParams.has('floor'));
-      await page.waitForFunction(() => window.__ready); await page.locator('.elevator-overlay').waitFor({ state: 'detached' });
-      assert.equal(await page.locator('.office-tour').isVisible(), false);
-      await page.locator('.social-focus-badge').waitFor();
-      assert.equal((await call('/session', undefined, visitorCookie)).data.office.paused, false);
-      // A tour must not start activity publishing on behalf of the visitor.
-      assert.equal((await call(`/offices/${visitor.data.office.id}`, undefined, visitorCookie)).data.agents.length, 0);
-      await page.getByRole('button', { name: 'Friends & characters', exact: true }).click();
-      const menu = page.frameLocator('.office-friends-dialog iframe'); await menu.locator('.social-extra-tools summary').click();await menu.locator('[data-action=tour]').click();
-      await page.locator('.office-tour[data-step="0"]').waitFor(); await page.locator('[data-tour-action=skip]').click();
-      assert.equal(await page.locator('.office-tour').isVisible(), false);
-      const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' }); phone.on('pageerror', e => errors.push(e.message));
-      await phone.goto(`${base}preview/tour`); await phone.waitForFunction(() => window.__ready); await phone.locator('.office-tour').waitFor();
-      assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-      await phone.screenshot({ path: 'shots/tour-mobile.png', timeout: 60000 });
-      await phone.locator('[data-tour-action=skip]').click(); assert.equal(await phone.locator('.office-tour').isVisible(), false);
-      assert.deepEqual(errors, []);
-      console.log('PASS: guided office/building/friend/focus/moment tour, explicit joins/publication, safe card preview, return home, replay/Skip, mobile and no implicit activity publication.');
     }
     console.log('PASS: isolated two-player preview, accepted invitation, changing synthetic agents, saved style, elevator, home and private API isolation.');
     await stop();

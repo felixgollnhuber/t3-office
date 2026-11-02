@@ -41,7 +41,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -p . && tsc -p tsconfig.node.json",
     "add-set": "node scripts/add-set.mjs",
-    "test": "node --experimental-strip-types --test server/building.test.ts server/accounting.test.ts scripts/bridge.test.mjs",
+    "test": "node --experimental-strip-types --test server/building.test.ts server/accounting.test.ts server/github-identity.test.ts scripts/bridge.test.mjs",
     "bridge": "node scripts/bridge.mjs",
     "serve": "vite preview",
     "test:e2e": "node scripts/building-view-test.mjs && node scripts/elevator-test.mjs && node scripts/menu-races.mjs && node scripts/smoke.mjs && node scripts/social-test.mjs && node scripts/doorbell-test.mjs && node scripts/humans-test.mjs",
@@ -50,7 +50,11 @@
     "test:social": "node scripts/social-test.mjs",
     "test:tour": "node scripts/friend-preview.mjs --check-tour",
     "test:doorbell": "node scripts/doorbell-test.mjs",
-    "test:humans": "node scripts/humans-test.mjs"
+    "test:humans": "node scripts/humans-test.mjs",
+    "test:onboarding:recovery": "node scripts/onboarding-recovery-test.mjs",
+    "test:onboarding:a11y": "node scripts/onboarding-accessibility-test.mjs",
+    "test:onboarding:demo": "node scripts/onboarding-demo-test.mjs",
+    "test:onboarding": "npm run test:onboarding:recovery && npm run test:onboarding:a11y && npm run test:tour && npm run test:onboarding:demo"
   },
   "dependencies": {
     "@fontsource-variable/bitcount-prop-single": "^5.3.0",

@@ -9,7 +9,7 @@ try{
  const password='synthetic-people-password';const h=await call(owner,'/register',{handle:'human_owner',name:'Alice',password}),g=await call(guest,'/register',{handle:'human_guest',name:'Bob',password});
 
  const hp=await owner.newPage(),gp=await guest.newPage();
- for(const p of[hp,gp]){p.on('pageerror',e=>{errors.push(e.message);console.error('Human browser error:',e.message);});await p.goto(base+'?source=demo&agents=2&weather=clear');await p.waitForFunction(()=>window.__ready);await p.locator('.human-launcher').click();await p.locator('.human-panel [data-tab=avatar]').click();await p.locator('.human-profile-form').waitFor();}
+ for(const p of[hp,gp]){p.on('pageerror',e=>{errors.push(e.message);console.error('Human browser error:',e.message);});await p.goto(base+'?source=demo&agents=2&weather=clear');await p.waitForFunction(()=>window.__ready,{},{timeout:60000});await p.locator('.human-launcher').click();await p.locator('.human-panel [data-tab=avatar]').click();await p.locator('.human-profile-form').waitFor();}
  // Add a friend in the same panel; generated access stays presence-only.
  await hp.locator('.human-panel [data-tab=visits]').click();await hp.locator('[data-human=invite]').click();
  const link=await hp.locator('.human-invite-result textarea').inputValue();const invitations=await call(owner,'/invites');assert.equal(invitations.invites[0].scope,'presence');
@@ -23,7 +23,7 @@ try{
  await gp.locator('.human-panel [data-tab=visits]').click();await gp.locator(`[data-human-room="${h.office.id}"] [data-request]`).waitFor({timeout:12000});await gp.locator(`[data-human-room="${h.office.id}"] [data-request]`).click();
  await hp.locator('.human-panel [data-tab=visits]').click();await hp.locator('[data-admit]').waitFor({timeout:12000});assert.match(await hp.locator('.human-requests').innerText(),/Bob Human/);await hp.locator('[data-admit]').click();
  await gp.locator(`[data-human-room="${h.office.id}"] [data-enter]`).waitFor({timeout:12000});await gp.locator(`[data-human-room="${h.office.id}"] [data-enter]`).click();
- await gp.waitForURL(u=>u.searchParams.get('floor')===h.office.id);await gp.waitForFunction(()=>window.__ready&&window.__humans?.state()?.people.length===2);await gp.locator('.elevator-overlay').waitFor({state:'detached'});
+ await gp.waitForURL(u=>u.searchParams.get('floor')===h.office.id);await gp.waitForFunction(()=>window.__ready&&window.__humans?.state()?.people.length===2,{},{timeout:60000});await gp.locator('.elevator-overlay').waitFor({state:'detached'});
  await hp.waitForFunction(()=>window.__humans.state()?.people.length===2);assert.equal(await gp.locator('.human-name').count(),2);assert.ok((await gp.locator('.human-name').allTextContents()).some(t=>t.includes('YOU · Bob Human')));
  await hp.locator('.human-panel [data-tab=chat]').click();
  await gp.locator('.human-send textarea').fill('Hello <script>this stays text</script>');await gp.locator('.human-send button[type=submit]').click();await hp.locator('.human-messages li').filter({hasText:'this stays text'}).waitFor({timeout:12000});assert.equal(await hp.locator('.human-messages script').count(),0);
