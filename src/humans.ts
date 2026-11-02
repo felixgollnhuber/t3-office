@@ -1,4 +1,5 @@
 /** Human avatars and office conversation. No agent identity, transcript or tool access. */
+import{mountHudAction}from'./hud-actions';
 import * as THREE from 'three';
 import { api, ApiError, type Session } from './building-api';
 import { createCharacter, type Character } from './character';
@@ -16,7 +17,7 @@ const HINT='office.human-room.v1',MONITOR='office.human-visits.v1';
 type Host={scene:THREE.Scene;camera:THREE.Camera;canvas:HTMLCanvasElement;nav:NavGrid;floorId:string|null};
 type Actor={ch:Character;label:HTMLButtonElement;ring:THREE.Mesh;person:HumanPerson;signature:string};
 export function installHumanOffice(host:Host){
- const launcher=document.createElement('button');launcher.className='human-launcher';launcher.textContent=T.title;document.body.append(launcher);
+ const launcher=document.createElement('button');launcher.className='human-launcher';launcher.textContent=T.title;mountHudAction(launcher,2);
  const panel=document.createElement('aside');panel.className='human-panel';panel.hidden=true;panel.setAttribute('aria-label',T.title);document.body.append(panel);
  panel.innerHTML=`<header><h1>${T.title}</h1><button data-human="close" aria-label="${T.close}">×</button></header><nav><button data-tab="chat">${T.chat}</button><button data-tab="avatar">${U.you}</button><button data-tab="visits">${U.friends}</button></nav><p class="human-notice" role="status" aria-live="polite"></p><div class="human-provider" hidden></div><main></main>`;
  const labels=document.createElement('div');labels.className='human-labels';document.body.append(labels);

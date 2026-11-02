@@ -1,3 +1,4 @@
+import { mountHudAction } from './hud-actions';
 import { installOfficeTour } from './tour';
 import type { BuildingRenderHost } from './building-view';
 import { travelToFloor } from './elevator';
@@ -40,10 +41,7 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
   const button = document.createElement('button');
   button.className = 'wx friends'; button.textContent = B.friendsMenu;
   button.setAttribute('aria-label', B.friendsMenu);
-  document.querySelector('#hud .clock')!.append(button);
-  const floating = button.cloneNode(true) as HTMLButtonElement;
-  floating.className = 'office-friends-launcher';
-  document.body.append(floating);
+  mountHudAction(button, 1);
   if (shared) {
     const home = document.createElement('button'); home.className = 'office-home-launcher'; home.textContent = `← ${B.own}`;
     home.addEventListener('click', () => { void travelToFloor(null); });
@@ -67,14 +65,13 @@ export function installOfficeMenu(source: AgentSource, shared: boolean, selectCh
   dialog.append(frame); document.body.append(dialog);
   const buildingButton = document.createElement('button'); buildingButton.className = 'office-building-launcher'; buildingButton.textContent = B.buildingView;
   buildingButton.addEventListener('click', () => { window.dispatchEvent(new Event('office-building-open')); dialog.close(); void import('./building-view').then(({ openBuildingView }) => openBuildingView(() => dialog.showModal(), renderHost)); });
-  document.body.append(buildingButton);
+  mountHudAction(buildingButton, 3);
   if (new URLSearchParams(location.search).get('building') === '1') window.addEventListener('office-ready', () => { const next = new URL(location.href); next.searchParams.delete('building'); history.replaceState(null, '', next); buildingButton.click(); }, { once: true });
   window.addEventListener('office-onboarding-customize',()=>{const first=source.threads()[0];if(first&&!shared)selectCharacter?.(first.id);});
   window.addEventListener('office-open-social', (event) => { const tab = (event as CustomEvent).detail?.tab; void openSocial(tab === 'moments' ? 'moments' : 'focus'); });
   window.addEventListener('office-social-account', () => { window.dispatchEvent(new Event('office-building-close')); openAccountMenu(); });
   const openAccountMenu=()=>{frame.contentWindow?.postMessage({type:'office-refresh-account'},location.origin);dialog.showModal();};
   button.addEventListener('click', openAccountMenu);
-  floating.addEventListener('click', openAccountMenu);
   dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
   const send = (data: unknown) => frame.contentWindow?.postMessage(data, location.origin);
   const localCharacters = () => source.threads().map((t) => ({ id: t.id, name: t.name, provider: t.provider, status: t.status, area: profiles[t.id]?.area ?? 'general', ...(t.characterStyle ? { style: t.characterStyle } : {}) }));
