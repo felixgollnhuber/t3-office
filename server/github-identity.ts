@@ -1,4 +1,4 @@
-/** Portable, opt-in GitHub identity foundation. No account linking, session issuance or production route yet. */
+/** Portable GitHub protocol adapter. Gated local HTTP/session integration lives in github-login.ts. */
 export type GitHubIdentity={provider:'github';subject:string;login:string;displayName:string};
 export type GitHubIdentityConfig={clientId:string;clientSecret:string;callbackUrl:string};
 type Transport=(url:string,init:RequestInit)=>Promise<Response>;
@@ -33,6 +33,7 @@ async function json(response:Response,limit:number,signal:AbortSignal){
 export class GitHubIdentityBroker{
  private config:Readonly<GitHubIdentityConfig>;private pending=new Map<string,Pending>();private transport:Transport;private now:()=>number;
  constructor(config:GitHubIdentityConfig,transport:Transport=(url,init)=>fetch(url,init),now:()=>number=Date.now){this.config=configuration(config);this.transport=transport;this.now=now;}
+ get callbackUrl(){return this.config.callbackUrl;}
  private prune(){for(const[key,value]of this.pending)if(value.expiresAt<=this.now())this.pending.delete(key);}
  async begin(){
   this.prune();if(this.pending.size>=MAX_PENDING)throw new IdentityError('capacity');

@@ -32,7 +32,7 @@ export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
 }
 
-export async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function api<T>(path: string, method = 'GET', body?: unknown, retryContext = true): Promise<T> {
   const res = await fetch(`/api/building${path}`, {
     method,
     credentials: 'same-origin',
@@ -44,6 +44,7 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
   // Preserve abort/parse failures. Treating an interrupted 200 response as success
   // made shared views mistake a temporary connection failure for a missing office.
   const json = await res.json();
+  if(res.status===428&&retryContext&&method==='POST'&&['/register','/login','/logout','/auth/github/start','/auth/github/confirm'].includes(path)){await api('/auth/providers');return api<T>(path,method,body,false);}
   if (!res.ok) throw new ApiError(json.error ?? 'Request failed.', res.status);
   return json as T;
 }

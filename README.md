@@ -149,6 +149,8 @@ Choose **Open & join my office** to accept visit requests and appear in your off
 
 ## Identity and cloud preparation
 
-The tested GitHub identity adapter is a disabled integration foundation, not an available sign-in option. No GitHub app, real authorization or cloud service has been provisioned. [Identity/cloud preparation](docs/identity-cloud.md) records the verified local adapter, activation requirements and proposed Cloudflare boundary. Local accounts continue to work independently.
+The GitHub protocol, local HTTP/account integration and configured-provider interface are tested with a simulated provider. The normal service keeps GitHub disabled until explicit setup. No GitHub app, real authorization or cloud service has been provisioned. [Identity/cloud preparation](docs/identity-cloud.md) records the verified local flow, activation requirements and proposed Cloudflare boundary. Local accounts continue to work independently.
 
 For the complete first-user verification locally, run `npm run test:onboarding`. It covers real two-browser setup, a scripted one-person demo, recovery/account races, keyboard/phone layouts and all four themes. `npm run test:tour` runs the fresh-account journey alone; `npm run test:onboarding:demo` runs the disposable scripted visit. These use synthetic accounts and isolated databases. No remote browser CI run is claimed.
+
+`npm run test:github` runs the configured-provider browser flow with intercepted GitHub navigation and synthetic server responses; it never contacts the real provider.

@@ -1,3 +1,5 @@
+import { githubLogin } from './github-login.ts';
+import type { GitHubIdentityBroker } from './github-identity.ts';
 import { humanSchema, humanRoute, revokeHumanAccess, leaveHumanRooms } from './humans.ts';
 import { isCharacterStyle, cleanCharacterStyle } from '../src/character-style.ts';
 import { DEFAULT_APPEARANCE, isAppearance, cleanAppearance } from '../src/appearance.ts';
@@ -57,7 +59,7 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   catch (e) { if (e instanceof ApiError) throw e; return fail(400, 'Invalid JSON.'); }
 }
 
-export function createBuildingHandler(options: { dbPath?: string; now?: () => number } = {}) {
+export function createBuildingHandler(options: { dbPath?: string; now?: () => number; github?: GitHubIdentityBroker } = {}) {
   const now = options.now ?? Date.now;
   const path = options.dbPath ?? resolve('.local/building.sqlite');
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -123,13 +125,15 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
   };
   const cookie = (req: IncomingMessage, res: ServerResponse, value: string, maxAge: number) => {
     const secure = !!(req.socket as { encrypted?: boolean }).encrypted;
-    res.setHeader('Set-Cookie', `building_session=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure ? '; Secure' : ''}`);
+    const previous=res.getHeader('Set-Cookie');const cookies=Array.isArray(previous)?previous:previous?[String(previous)]:[];
+    res.setHeader('Set-Cookie', [...cookies,`building_session=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure ? '; Secure' : ''}`]);
   };
   const startSession = (req: IncomingMessage, res: ServerResponse, user: User) => {
     const raw = token();
     run('DELETE FROM sessions WHERE expires<=?', now());
     run('INSERT INTO sessions VALUES(?,?,?)', hash(raw), user.id, now() + 7 * DAY);
     cookie(req, res, raw, 7 * DAY / 1000);
+    if(options.github)identityRoutes.clearProof(req,res);
   };
   const floor = (office: Row, user: User, level: string) => {
     const isOwner = office.owner === user.id;
@@ -186,6 +190,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
     rates.set(key, current);
     if (current.count > 20) fail(429, 'Too many sign-in attempts. Try again in 15 minutes.');
   };
+  const identityRoutes=githubLogin(db,options.github,now);
   const handle = (req: IncomingMessage, res: ServerResponse, next: Next = () => { res.statusCode = 404; res.end(); }) => {
     const pathname = (req.url ?? '').split('?')[0];
     if (pathname !== '/api/building' && !pathname.startsWith('/api/building/')) return next();
@@ -207,16 +212,20 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
         if (!allowed.includes(method)) fail(405, 'Method not allowed.');
         return true;
       };
+      const localAuthContext=method==='POST'&&['/register','/login','/logout'].includes(route)?identityRoutes.localIntent(req,fail):null;
+      if(await identityRoutes({req,res,route,method,body:()=>body(req),reply,fail,current:()=>{try{return authenticate(req);}catch(error){if(error instanceof ApiError&&error.status===401)return null;throw error;}},limit:()=>limitAuth(req),startSession:user=>startSession(req,res,user)}))return;
       if (match('/register', ['POST'])) {
         limitAuth(req);
-        const input = await body(req);
+        const authIntent=localAuthContext;
+        const input = await body(req);identityRoutes.checkIntent(authIntent,fail);
+        if(options.github){try{authenticate(req);fail(409,'An account is already signed in. Sign out first.');}catch(error){if(!(error instanceof ApiError&&error.status===401))throw error;}}
         const handle = text(input.handle, 'handle', 32, 3).toLowerCase();
         if (!/^[a-z0-9_-]+$/.test(handle)) fail(400, 'Use letters, numbers, underscores or hyphens for your handle.');
         const name = text(input.name, 'name', 60);
         const password = passwordInput(input.password);
         if (one('SELECT id FROM users WHERE handle=?', handle)) fail(409, 'That handle is already taken.');
         const salt = randomBytes(16).toString('hex');
-        const key = (await derive(password, salt, 64)) as Buffer;
+        const key = (await derive(password, salt, 64)) as Buffer;identityRoutes.checkIntent(authIntent,fail);
         const user = { id: randomUUID(), handle, name };
         db.exec('BEGIN IMMEDIATE');
         try {
@@ -231,11 +240,13 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
       }
       if (match('/login', ['POST'])) {
         limitAuth(req);
-        const input = await body(req);
+        const authIntent=localAuthContext;
+        const input = await body(req);identityRoutes.checkIntent(authIntent,fail);
+        if(options.github){try{authenticate(req);fail(409,'An account is already signed in. Sign out first.');}catch(error){if(!(error instanceof ApiError&&error.status===401))throw error;}}
         const handle = text(input.handle, 'handle', 32, 3).toLowerCase();
         const password = passwordInput(input.password);
         const row = one('SELECT * FROM users WHERE handle=?', handle);
-        const key = (await derive(password, row ? String(row.salt) : 'invalid-account-salt', 64)) as Buffer;
+        const key = (await derive(password, row ? String(row.salt) : 'invalid-account-salt', 64)) as Buffer;identityRoutes.checkIntent(authIntent,fail);
         if (!row || !timingSafeEqual(key, Buffer.from(String(row.password), 'hex'))) fail(401, 'Incorrect handle or password.');
         const user = { id: String(row.id), handle: String(row.handle), name: String(row.name) };
         startSession(req, res, user);
@@ -368,11 +379,12 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
       }
 
       if (match('/logout', ['POST'])) {
-        await authorizedBody();
+        const authIntent=localAuthContext;await authorizedBody();identityRoutes.checkIntent(authIntent,fail);
         const raw = req.headers.cookie!.split(';').map((p) => p.trim()).find((p) => p.startsWith('building_session='))!.slice('building_session='.length);
         leaveHumanRooms(db,user.id);
         run('DELETE FROM sessions WHERE token=?', hash(raw));
         cookie(req, res, '', 0);
+        if(options.github)identityRoutes.clearProof(req,res);
         return reply(200, { ok: true });
       }
       if (match('/floors', ['GET'])) {
@@ -511,7 +523,7 @@ export function createBuildingHandler(options: { dbPath?: string; now?: () => nu
   return { handle, close: () => db.close() };
 }
 
-export function buildingApi(options: { dbPath?: string } = {}): Plugin {
+export function buildingApi(options: { dbPath?: string; github?: GitHubIdentityBroker } = {}): Plugin {
   const mount = (server: ViteDevServer | PreviewServer) => {
     const api = createBuildingHandler(options);
     server.middlewares.use(api.handle);
