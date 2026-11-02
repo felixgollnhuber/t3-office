@@ -8,3 +8,5 @@ body.building-view-open .human-labels,body.building-view-open .human-panel,body.
 @media(max-width:700px){.human-panel{right:8px;top:8px;bottom:8px;width:min(390px,calc(100vw - 16px));font-size:16px;}.human-launcher{font-size:14px;left:12px;bottom:70px;}.human-name{font-size:12px;max-width:170px;}}
 
 .human-consent summary{cursor:pointer;text-decoration:underline;padding:6px 0;}.human-panel .human-send{position:sticky;bottom:-18px;background:oklch(from var(--paper,#f3efdd) l c h / 1);padding:12px 0;margin-bottom:0;box-shadow:0 -3px 0 var(--edge);}.human-name{font-size:15px;}
+
+.human-panel details>summary{cursor:pointer;padding:10px 0;color:var(--muted);}.human-panel details[open]>summary{color:var(--ink);}.human-panel .human-invite-result textarea{min-height:65px;}.human-panel .human-invite-result:empty,.human-notice:empty{display:none;}.human-panel [data-human=invite],.human-panel [data-human=host]{width:100%;background:var(--ink);color:var(--paper);}.human-panel .human-requests:has(article){border-left:3px solid var(--accent);padding-left:10px;}

@@ -81,7 +81,7 @@ Tests use synthetic accounts/sources and an isolated database. Browser checks co
 - [Tasks](docs/tasks.md): ownership, evidence and handoffs.
 - [SECURITY.md](SECURITY.md): privacy boundaries.
 
-The existing starter history and Felix Gollnhuber's MIT license/authorship are retained. No external fork or remote repository has been created. Elevator travel uses a compact stylized cutaway animation. Chat and remote agent control remain outside this release. Created in [T3 Code](https://t3.codes).
+The existing starter history and Felix Gollnhuber's MIT license/authorship are retained. No external fork or remote repository has been created. Elevator travel uses a compact stylized cutaway animation. Human office chat is available locally; remote agent control remains outside this release. Created in [T3 Code](https://t3.codes).
 
 ## Try a simulated friend
 
@@ -130,3 +130,9 @@ Leaving removes your live avatar and chat read access. A missed heartbeat expire
 Messages are limited to 500 characters, one per second and twenty per minute. Rooms retain at most 200 messages, display the most recent 100 available to you, and hide/prune messages older than seven days on room requests. Newly admitted guests see only messages sent after admission, using a sequence boundary even for identical timestamps. Downloaded or previously seen text cannot be recalled. Nothing is publicly hosted by enabling these local features.
 
 `npm run test:humans` runs the synthetic two-user original-office avatar/chat/walking test; it is included in `npm run test:e2e`. Run `npm run demo:friends`, then open [Meet simulated Maya](http://127.0.0.1:5175/preview/people). Request entry, wait for the explicitly simulated host to admit you, enter the conversation, and send a greeting. Maya is a scripted simulation, not a real person or AI model; this automatic admission/reply behavior exists only in the disposable demo launcher.
+
+## A simpler way to meet friends
+
+Open **People & chat → Friends**. **Invite a friend** creates a presence-only invitation; copy its link. The recipient uses **Have an invite? → Add friend** in the same panel. Activity sharing remains a separate explicit choice under account/office settings.
+
+Choose **Open & join my office** to accept visit requests and appear in your office in one action. Friends ring from their office card; you admit them and they choose to walk in. This does not bypass admission. **Visit settings** contains closing/DND; **People in this room** contains removal. Your avatar is under **You**. The original menu keeps focus, milestones, tour and doorbell under **More tools**. The synthetic preview's five shortcuts are under **Demo shortcuts**.

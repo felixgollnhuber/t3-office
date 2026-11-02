@@ -1,20 +1,25 @@
 /** Real original-office, two-human conversation and walking checks. Synthetic data only. */
 import assert from 'node:assert/strict';import{mkdtemp,rm,mkdir}from'node:fs/promises';import{join}from'node:path';import{tmpdir}from'node:os';import{chromium}from'playwright';import{createServer}from'vite';
 const dir=await mkdtemp(join(tmpdir(),'office-people-'));process.env.BUILDING_DB=join(dir,'test.sqlite');delete process.env.T3_LOCAL_DATA;
-const server=await createServer({server:{host:'localhost',port:0},logLevel:'error'});let browser;
+const server=await createServer({server:{host:'localhost',port:0},logLevel:'error'});let browser;const errors=[];
 try{
  await server.listen();const base=server.resolvedUrls.local[0];browser=await chromium.launch({args:['--use-angle=swiftshader','--enable-webgl']});
  const owner=await browser.newContext({viewport:{width:1280,height:900},reducedMotion:'reduce'}),guest=await browser.newContext({viewport:{width:1280,height:900},reducedMotion:'reduce'});
  const call=async(ctx,p,data,method=data===undefined?'GET':'POST')=>{const r=await ctx.request.fetch(base+'api/building'+p,{method,...(data===undefined?{}:{data})});assert.ok(r.ok(),p+':'+r.status());return r.json();};
  const password='synthetic-people-password';const h=await call(owner,'/register',{handle:'human_owner',name:'Alice',password}),g=await call(guest,'/register',{handle:'human_guest',name:'Bob',password});
- const invite=await call(owner,'/invites',{scope:'presence'});await call(guest,'/accept',{token:invite.token});
- const hp=await owner.newPage(),gp=await guest.newPage(),errors=[];
- for(const p of[hp,gp]){p.on('pageerror',e=>errors.push(e.message));await p.goto(base+'?source=demo&agents=2&weather=clear');await p.waitForFunction(()=>window.__ready);await p.locator('.human-launcher').click();await p.locator('.human-panel [data-tab=avatar]').click();await p.locator('.human-profile-form').waitFor();}
+
+ const hp=await owner.newPage(),gp=await guest.newPage();
+ for(const p of[hp,gp]){p.on('pageerror',e=>{errors.push(e.message);console.error('Human browser error:',e.message);});await p.goto(base+'?source=demo&agents=2&weather=clear');await p.waitForFunction(()=>window.__ready);await p.locator('.human-launcher').click();await p.locator('.human-panel [data-tab=avatar]').click();await p.locator('.human-profile-form').waitFor();}
+ // Add a friend in the same panel; generated access stays presence-only.
+ await hp.locator('.human-panel [data-tab=visits]').click();await hp.locator('[data-human=invite]').click();
+ const link=await hp.locator('.human-invite-result textarea').inputValue();const invitations=await call(owner,'/invites');assert.equal(invitations.invites[0].scope,'presence');
+ await gp.locator('.human-panel [data-tab=visits]').click();await gp.locator('details').filter({has:gp.locator('.human-accept')}).locator('summary').click();await gp.locator('.human-accept input').fill(link);await gp.locator('.human-accept button').click();await gp.locator(`[data-human-room="${h.office.id}"]`).waitFor();
+ await hp.locator('.human-panel [data-tab=avatar]').click();await gp.locator('.human-panel [data-tab=avatar]').click();
  await hp.locator('.human-profile-form input[name=name]').fill('Alice Human');await hp.locator('.human-profile-form select[name=color]').selectOption('rose');await hp.locator('.human-profile-form button[type=submit]').click();await hp.waitForResponse(r=>r.url().endsWith('/api/building/human')&&r.request().method()==='GET');
  await gp.locator('.human-profile-form input[name=name]').fill('Bob Human');await gp.locator('.human-profile-form select[name=color]').selectOption('sage');await gp.locator('.human-profile-form button[type=submit]').click();await gp.waitForResponse(r=>r.url().endsWith('/api/building/human')&&r.request().method()==='GET');
- await hp.locator('.human-panel [data-tab=visits]').click();await hp.locator('.human-room-settings input[name=open]').check();await hp.locator('.human-room-settings button[type=submit]').click();
- await hp.waitForFunction(()=>document.querySelector('.human-directory')?.textContent.includes('Alice'));
- await hp.locator('.human-panel [data-tab=chat]').click();await hp.locator('.human-panel [data-enter]').click();await hp.waitForFunction(()=>window.__humans.state()?.people.length===1);
+ await hp.locator('.human-panel [data-tab=visits]').click();await mkdir('shots',{recursive:true});await hp.screenshot({path:'shots/simplified-friends.png',timeout:60000});await hp.locator('[data-human=host]').click();await hp.waitForFunction(()=>window.__humans.state()?.people.length===1);
+ await hp.waitForFunction(()=>document.querySelector('.human-panel h2')?.textContent.includes('Alice'));
+ await hp.locator('.human-panel [data-tab=chat]').click();await hp.waitForFunction(()=>window.__humans.state()?.people.length===1);
  await gp.locator('.human-panel [data-tab=visits]').click();await gp.locator(`[data-human-room="${h.office.id}"] [data-request]`).waitFor({timeout:12000});await gp.locator(`[data-human-room="${h.office.id}"] [data-request]`).click();
  await hp.locator('.human-panel [data-tab=visits]').click();await hp.locator('[data-admit]').waitFor({timeout:12000});assert.match(await hp.locator('.human-requests').innerText(),/Bob Human/);await hp.locator('[data-admit]').click();
  await gp.locator(`[data-human-room="${h.office.id}"] [data-enter]`).waitFor({timeout:12000});await gp.locator(`[data-human-room="${h.office.id}"] [data-enter]`).click();
@@ -42,7 +47,7 @@ try{
  await hp.locator('.human-send textarea').fill('A new message while your panel is closed');await hp.locator('.human-send button[type=submit]').click();await gp.waitForFunction(()=>/· [1-9]/.test(document.querySelector('.human-launcher').textContent),{},{timeout:12000});
  await gp.locator('.human-launcher').click();await gp.locator('.human-messages li').filter({hasText:'A new message'}).waitFor();
  await gp.setViewportSize({width:390,height:844});assert.equal(await gp.locator('.human-panel').evaluate(e=>e.scrollWidth<=e.clientWidth),true);await gp.screenshot({path:'shots/humans-mobile.png',timeout:60000});
- await hp.locator(`[data-kick="${g.user.id}"]`).click();await gp.waitForFunction(()=>window.__humans.state()===null);assert.equal(await gp.locator('.human-name').count(),0);assert.equal(await gp.locator('[data-message]').count(),0);assert.equal(await gp.locator('.human-send').count(),0);
+ await hp.locator('.human-member-details summary').click();await hp.locator(`[data-kick="${g.user.id}"]`).click();await gp.waitForFunction(()=>window.__humans.state()===null);assert.equal(await gp.locator('.human-name').count(),0);assert.equal(await gp.locator('[data-message]').count(),0);assert.equal(await gp.locator('.human-send').count(),0);
  assert.equal((await call(guest,'/rooms')).rooms.find(r=>r.id===h.office.id).admitted,false);
  // Failed room reads must clear messages/avatars; an explicit entry can reconnect.
  await hp.route('**/api/building/rooms/*/state',route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"synthetic outage"}'}));

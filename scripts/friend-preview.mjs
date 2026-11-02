@@ -40,7 +40,7 @@ if (window === parent) {
  visit.addEventListener('click', event => { event.preventDefault(); void travelToFloor(__DEMO_FLOOR__); });
  home.addEventListener('click', event => { event.preventDefault(); void travelToFloor(null); });
  for (const a of [visit,home,tour,bell,people]) a.style.color='#263a34';
- bar.append(label,visit,home,tour,bell,people); document.body.append(bar);
+ const tools=document.createElement('details'); const summary=document.createElement('summary');summary.textContent='Demo shortcuts';tools.append(summary,visit,home,tour,bell,people);bar.append(label,tools); document.body.append(bar);
 }
 </script>`;
 const server = await createServer({
@@ -205,6 +205,8 @@ try {
       assert.deepEqual(errors, []);
     }
     if (tourCheck) {
+      // Keep the synthetic host online throughout slow screenshot runs; retain real freshness enforcement.
+      interval = setInterval(() => { void publish().catch(error => console.error('Synthetic tour heartbeat failed:', error.message)); }, 8000);
       const { chromium } = await import('playwright');
       browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-webgl'] });
       const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', acceptDownloads: true });
@@ -243,7 +245,7 @@ try {
       // A tour must not start activity publishing on behalf of the visitor.
       assert.equal((await call(`/offices/${visitor.data.office.id}`, undefined, visitorCookie)).data.agents.length, 0);
       await page.getByRole('button', { name: 'Friends & characters', exact: true }).click();
-      const menu = page.frameLocator('.office-friends-dialog iframe'); await menu.locator('[data-action=tour]').click();
+      const menu = page.frameLocator('.office-friends-dialog iframe'); await menu.locator('.social-extra-tools summary').click();await menu.locator('[data-action=tour]').click();
       await page.locator('.office-tour[data-step="0"]').waitFor(); await page.locator('[data-tour-action=skip]').click();
       assert.equal(await page.locator('.office-tour').isVisible(), false);
       const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' }); phone.on('pageerror', e => errors.push(e.message));
