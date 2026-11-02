@@ -11,6 +11,7 @@ try{
 
  // Same-origin static serving and private-route isolation.
  assert.equal((await fetch(base+'?building=1')).headers.get('content-type')?.startsWith('text/html'),true);
+ const page=await fetch(base);assert.equal(page.headers.get('x-frame-options'),'SAMEORIGIN');assert.match(page.headers.get('content-security-policy')??'',/frame-ancestors 'self'/);assert.equal(page.headers.get('x-content-type-options'),'nosniff');assert.equal(page.headers.get('strict-transport-security'),null,'No HSTS on plain loopback development');
  for(const p of['api/t3/threads','api/board','.env','api/building/../t3/threads'])assert.equal((await fetch(base+p)).status,404,p);
  assert.equal((await fetch(base+'api/building/session')).status,401);
 

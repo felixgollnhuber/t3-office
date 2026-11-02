@@ -1,12 +1,12 @@
 /** Durable browser-bound OAuth. The provider protocol is shared with the existing Node implementation. */
 import {GitHubIdentityBroker,IdentityError,type GitHubChallengeStore,type GitHubIdentity} from '../server/github-identity';
-import {hash,nonce,fail,readCookie,type Context,type IdentityEnv,type User} from './context';
+import {hash,nonce,fail,readCookie,cookieAttributes,limit,type Context,type IdentityEnv,type User} from './context';
 import {randomUUID,randomBytes,createHash} from 'node:crypto';
 const DEVICE='office_cloud_auth',BIND='office_cloud_github',FINISH='office_cloud_confirm',TTL=600000;
 type Intent={id:string;version:number};
 export function cloudIdentity(ctx:Context,env:IdentityEnv){
  const {req,sql,db,headers}=ctx;const enabled=!!env.GITHUB_CLIENT_ID&&!!env.GITHUB_CLIENT_SECRET;
- const cookie=(key:string,value:string,age:number,lax=false)=>headers.append('Set-Cookie',`${key}=${value}; Path=/; HttpOnly; SameSite=${lax?'Lax':'Strict'}; Max-Age=${age}`);
+ const cookie=(key:string,value:string,age:number,lax=false)=>headers.append('Set-Cookie',`${key}=${value}; ${cookieAttributes(ctx.origin,lax?'Lax':'Strict')}; Max-Age=${age}`);
  const intent=async():Promise<Intent|null>=>{if(!enabled)return null;const id=hash(readCookie(req,DEVICE)),row=await sql('SELECT version FROM auth_contexts WHERE id=? AND expires>?',id,Date.now()).first<{version:number}>();if(!row)fail(428,'Refresh sign-in context and try again.');return{id,version:row.version};};
  const check=async(value:Intent|null)=>{if(value&&!await sql('SELECT id FROM auth_contexts WHERE id=? AND version=? AND expires>?',value.id,value.version,Date.now()).first())fail(409,'Sign-in context changed. Start again.');};
  const invalidate=async(value:Intent|null)=>{if(!value)return;const row=await sql('UPDATE auth_contexts SET version=version+1 WHERE id=? AND version=? AND expires>? RETURNING version',value.id,value.version,Date.now()).first<{version:number}>();if(!row)fail(409,'Sign-in context changed.');cookie(BIND,'',0,true);cookie(FINISH,'',0);return{id:value.id,version:row.version};};
@@ -20,13 +20,13 @@ export function cloudIdentity(ctx:Context,env:IdentityEnv){
   if(ctx.path==='/auth/providers'){
    if(ctx.method!=='GET')fail(405,'Method not allowed.');if(enabled){const id=hash(readCookie(req,DEVICE));if(!await sql('SELECT id FROM auth_contexts WHERE id=? AND expires>?',id,Date.now()).first()){
     await sql('DELETE FROM github_flows WHERE expires<=?',Date.now()).run();await sql('DELETE FROM auth_contexts WHERE expires<=? AND NOT EXISTS(SELECT 1 FROM github_flows WHERE context=auth_contexts.id)',Date.now()).run();
-    await sql('DELETE FROM auth_limits WHERE expires<=?',Date.now()).run();const rate=await sql("INSERT INTO auth_limits VALUES('local-contexts',1,?) ON CONFLICT(key) DO UPDATE SET count=count+1 RETURNING count",Date.now()+900000).first<{count:number}>();if(rate!.count>20)fail(429,'Too many new sign-in contexts.');const value=nonce();if(!(await sql('INSERT INTO auth_contexts SELECT ?,0,? WHERE (SELECT COUNT(*) FROM auth_contexts)<1000',hash(value),Date.now()+1800000).run()).meta.changes)fail(429,'Too many sign-in contexts.');cookie(DEVICE,value,604800);
+    await limit(sql,'contexts:'+ctx.client,20,900000,'Too many new sign-in contexts.');const value=nonce();if(!(await sql('INSERT INTO auth_contexts SELECT ?,0,? WHERE (SELECT COUNT(*) FROM auth_contexts)<1000',hash(value),Date.now()+1800000).run()).meta.changes)fail(429,'Too many sign-in contexts.');cookie(DEVICE,value,604800);
    }}return ctx.reply(200,{github:enabled});
   }
   if(!ctx.path.startsWith('/auth/github/'))return null;await sql('DELETE FROM github_flows WHERE expires<=?',Date.now()).run();if(!broker)fail(503,'GitHub sign-in is not configured.');
   const action=ctx.path.slice('/auth/github/'.length);if(!['start','callback','pending','confirm','cancel'].includes(action))fail(404,'Unknown sign-in endpoint.');if(ctx.method!==(['callback','pending'].includes(action)?'GET':'POST'))fail(405,'Method not allowed.');
   if(action==='start'){
-   const before=await intent();await ctx.body();await check(before);await anonymous();const i=(await invalidate(before))!;const rate=await sql("INSERT INTO auth_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1 RETURNING count",'oauth:'+i.id,Date.now()+900000).first<{count:number}>();if(rate!.count>5)fail(429,'Too many sign-in attempts.');let attempt;try{attempt=await broker.begin();}catch(error){if(error instanceof IdentityError)fail(error.code==='capacity'?429:502,error.message);throw error;}
+   const before=await intent();await ctx.body();await check(before);await anonymous();await limit(sql,'oauth-client:'+ctx.client,20,900000,'Too many sign-in attempts.');const i=(await invalidate(before))!;const rate=await sql("INSERT INTO auth_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1 RETURNING count",'oauth:'+i.id,Date.now()+900000).first<{count:number}>();if(rate!.count>5)fail(429,'Too many sign-in attempts.');let attempt;try{attempt=await broker.begin();}catch(error){if(error instanceof IdentityError)fail(error.code==='capacity'?429:502,error.message);throw error;}
    const inserted=await sql(`INSERT INTO github_flows SELECT ?,?,?,'pending',?,NULL,NULL WHERE ${guardSql(i)} AND (SELECT COUNT(*) FROM github_flows)<100`,hash(attempt.browserToken),i.id,i.version,attempt.expiresAt).run();if(!inserted.meta.changes)fail(409,'Sign-in context changed or capacity reached.');cookie(BIND,attempt.browserToken,600,true);return ctx.reply(200,{authorizationUrl:attempt.authorizationUrl});
   }
   if(action==='cancel'){const i=await intent();await ctx.body();await invalidate(i);return ctx.reply(200,{ok:true});}
@@ -41,6 +41,10 @@ export function cloudIdentity(ctx:Context,env:IdentityEnv){
   await anonymous();const i=await intent();if(!i)fail(401,'Sign-in unavailable.');
   if(action==='pending'){const row=await sql("SELECT identity FROM github_flows WHERE binding=? AND proof=? AND stage='confirmed' AND context=? AND version=? AND expires>? AND EXISTS(SELECT 1 FROM auth_contexts WHERE id=? AND version=? AND expires>?)",hash(readCookie(req,BIND)),hash(readCookie(req,FINISH)),i.id,i.version,Date.now(),i.id,i.version,Date.now()).first<{identity:string}>();if(!row)fail(401,'Confirmation expired.');return ctx.reply(200,{identity:JSON.parse(row.identity)});}
   await ctx.body();await check(i);await anonymous();
+  // Optional trial guest list: only named GitHub logins may finish sign-in (case-insensitive).
+  const allowed=(env.GITHUB_ALLOWED_LOGINS??'').split(',').map(v=>v.trim().toLowerCase()).filter(Boolean);
+  if(allowed.length){const row=await sql("SELECT json_extract(identity,'$.login') login FROM github_flows WHERE binding=? AND proof=? AND stage='confirmed' AND expires>?",hash(readCookie(req,BIND)),hash(readCookie(req,FINISH)),Date.now()).first<{login:string}>();
+   if(!row)fail(409,'Confirmation expired or already used.');if(!allowed.includes(String(row.login).toLowerCase())){await sql('DELETE FROM github_flows WHERE binding=?',hash(readCookie(req,BIND))).run();cookie(BIND,'',0,true);cookie(FINISH,'',0);fail(403,'This GitHub account is not on this trial’s guest list.');}}
   // Claim context + identity and create session in one D1 batch. A temporary claim marker scopes every write.
   const marker=nonce(),uid=randomUUID(),oid=randomUUID(),session=nonce(),binding=hash(readCookie(req,BIND)),proof=hash(readCookie(req,FINISH));
   const valid=`binding=? AND proof=? AND stage='confirmed' AND context=? AND version=? AND expires>? AND ${guardSql(i)}`;
