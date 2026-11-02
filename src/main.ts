@@ -39,6 +39,7 @@ import { clickables, hintOf, pickClickable, type Clickable } from './interact';
 import { showDemoBar } from './demobar';
 import { SharedSource } from './sharedsource';
 import { installOfficeMenu } from './officemenu';
+import { installHudFit } from './hud-fit';
 
 async function main() {
   const params = new URLSearchParams(location.search);
@@ -108,6 +109,7 @@ async function main() {
   const player = new Player(sfx, () => hud!.ytHost());
   const world = new World(office, theme, source, cycle, sfx, player, weather);
   hud = new Hud(theme, sfx, clock, source, player, weather, () => { window.dispatchEvent(new Event('office-building-close')); menu.open(); });
+  installHudFit(document.getElementById('hud')!);
   installOfficeMenu(source, shared, (id) => focusAgent(id), {
     canvas, theme,
     render: (scene, camera) => pipe.render(scene, camera),
