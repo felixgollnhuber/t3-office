@@ -86,12 +86,11 @@ Tests use synthetic accounts/sources and an isolated database. Browser checks co
 
 ## Project records
 
-- [AGENTS.md](AGENTS.md): shared agent protocol.
-- [Project context](docs/project.md): decisions and limits.
-- [Tasks](docs/tasks.md): ownership, evidence and handoffs.
 - [SECURITY.md](SECURITY.md): privacy boundaries.
+- [Identity and cloud notes](docs/identity-cloud.md): GitHub sign-in and the Worker/D1 backend.
+- [Hosted trial runbook](docs/hosting.md): Cloudflare setup, limits, backups and shutdown.
 
-The existing starter history and Felix Gollnhuber's MIT license/authorship are retained. No external fork or remote repository has been created. Elevator travel uses a compact stylized cutaway animation. Human office chat is available locally; remote agent control remains outside this release. Created in [T3 Code](https://t3.codes).
+Felix Gollnhuber's MIT license and authorship are retained; this branch builds on upstream `main` (b14eb1c). Elevator travel uses a compact stylized cutaway animation. Human office chat is available locally; remote agent control remains outside this release. Created in [T3 Code](https://t3.codes).
 
 ## Try a simulated friend
 

@@ -52,7 +52,7 @@ Before the first deploy, also run `npm run test:cloud` and `npm run test:cloud:u
 1. Both participants open the address and choose **Continue with GitHub** in People & chat.
 2. One person creates an invitation (Friends panel) and sends the link. The other accepts it explicitly.
 3. Try visiting, admitting, walking, chat, sharing, pause and revoke. Then close one browser, reopen it and check that reconnecting keeps the right permissions.
-4. Note anything confusing or broken in `docs/tasks.md` (OFF-007).
+4. Note anything confusing or broken in a GitHub issue or the pull request.
 
 Agent activity on the hosted building comes only from explicit browser sharing or the publisher bridge (`npm run bridge -- --server <APP_ORIGIN> …`). The private local companion is never exposed.
 
