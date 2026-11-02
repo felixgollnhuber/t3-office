@@ -1,0 +1,14 @@
+CREATE TABLE focus_sessions(id TEXT PRIMARY KEY,office TEXT NOT NULL UNIQUE REFERENCES offices(id),started INTEGER NOT NULL,ends INTEGER NOT NULL);
+CREATE TABLE focus_members(session TEXT NOT NULL REFERENCES focus_sessions(id) ON DELETE CASCADE,user TEXT NOT NULL REFERENCES users(id),quiet INTEGER NOT NULL CHECK(quiet IN(0,1)),PRIMARY KEY(session,user));
+CREATE INDEX focus_members_user ON focus_members(user);
+CREATE TABLE moments(id TEXT PRIMARY KEY,office TEXT NOT NULL REFERENCES offices(id),title TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN('shipped','milestone','helped')),created INTEGER NOT NULL);
+CREATE INDEX moments_office_created ON moments(office,created);
+CREATE TABLE doorbell_prefs(user TEXT PRIMARY KEY REFERENCES users(id),enabled INTEGER NOT NULL CHECK(enabled IN(0,1)),dnd INTEGER NOT NULL CHECK(dnd IN(0,1)));
+CREATE TABLE doorbell_requests(id TEXT PRIMARY KEY,requester TEXT NOT NULL REFERENCES users(id),host TEXT NOT NULL REFERENCES users(id),session TEXT NOT NULL REFERENCES focus_sessions(id) ON DELETE CASCADE,quiet INTEGER NOT NULL CHECK(quiet IN(0,1)),created INTEGER NOT NULL,expires INTEGER NOT NULL,status TEXT NOT NULL CHECK(status IN('pending','accepted','declined')));
+CREATE INDEX doorbell_session ON doorbell_requests(session);
+CREATE INDEX doorbell_requester ON doorbell_requests(requester);
+CREATE INDEX doorbell_host ON doorbell_requests(host);
+CREATE TABLE doorbell_cooldown(requester TEXT NOT NULL,host TEXT NOT NULL,last INTEGER NOT NULL,PRIMARY KEY(requester,host));
+CREATE TRIGGER clear_social_on_revoke AFTER DELETE ON grants BEGIN DELETE FROM focus_members WHERE user=OLD.user AND session IN(SELECT id FROM focus_sessions WHERE office=OLD.office);DELETE FROM doorbell_requests WHERE requester=OLD.user AND session IN(SELECT id FROM focus_sessions WHERE office=OLD.office);END;
+CREATE TRIGGER decline_rings_on_silence_insert AFTER INSERT ON doorbell_prefs WHEN NEW.enabled=0 OR NEW.dnd=1 BEGIN UPDATE doorbell_requests SET status='declined' WHERE host=NEW.user AND status='pending'; END;
+CREATE TRIGGER decline_rings_on_silence AFTER UPDATE ON doorbell_prefs WHEN NEW.enabled=0 OR NEW.dnd=1 BEGIN UPDATE doorbell_requests SET status='declined' WHERE host=NEW.user AND status='pending'; END;

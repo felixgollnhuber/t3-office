@@ -1,12 +1,14 @@
 /** Local-only collaborative API adapter. Private companion data is never read or exposed. */
+import {DEFAULT_APPEARANCE} from '../src/appearance';
 import {scrypt,randomBytes,randomUUID,createHash,timingSafeEqual} from 'node:crypto';
 import {promisify} from 'node:util';
 import {Buffer} from 'node:buffer';
 import {cloudIdentity} from './identity';
 import {Failure,fail,sessionGuard,quote} from './context';
 import {cloudHumans} from './humans';
+import {cloudSocial,momentOf,momentProjection,type WithMoment} from './social';
 import {cloudActivity,activitySnapshot,profileProjection,type Office} from './activity';
-interface Env{DB:D1Database;APP_ORIGIN:string;GITHUB_CLIENT_ID?:string;GITHUB_CLIENT_SECRET?:string;GITHUB_TRANSPORT?:Fetcher}
+interface Env{DB:D1Database;APP_ORIGIN:string;ASSETS?:Fetcher;GITHUB_CLIENT_ID?:string;GITHUB_CLIENT_SECRET?:string;GITHUB_TRANSPORT?:Fetcher}
 type User={id:string;handle:string;name:string};
 const derive=promisify(scrypt),DAY=86400000,COOKIE='office_cloud_session';
 const hash=(v:string)=>createHash('sha256').update(v).digest('hex');
@@ -29,6 +31,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
   if(!['localhost','127.0.0.1','[::1]'].includes(origin.hostname)||url.origin!==origin.origin)fail(503,'Local permission prototype only.');
   if(req.headers.has('Authorization')&&!(url.pathname==='/api/building/publish'&&req.method==='POST'&&/^Bearer [A-Za-z0-9_-]{43}$/.test(req.headers.get('Authorization')!)))fail(401,'Publisher credentials can only publish.');
   if(req.headers.has('Origin')&&req.headers.get('Origin')!==origin.origin)fail(403,'Cross-origin request denied.');
+  if(!/^\/api(?:\/|$)/.test(url.pathname)){if(!['GET','HEAD'].includes(req.method)||/(^|\/)\./.test(url.pathname)||url.pathname.startsWith('/@')||!env.ASSETS)fail(404,'Endpoint not found.');return env.ASSETS.fetch(req);}
   const base='/api/building',path=url.pathname.startsWith(base+'/')?url.pathname.slice(base.length):'';
   if(!path)fail(404,'Endpoint not found.');const method=req.method;
   const db=env.DB.withSession('first-primary'),sql=(query:string,...values:(string|number)[])=>db.prepare(query).bind(...values);
@@ -38,8 +41,8 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
   const current=()=>publisher?sql('SELECT u.id,u.handle,u.name FROM users u JOIN publisher_tokens p ON p.user=u.id WHERE p.token=? AND p.expires>?',publisherToken,Date.now()).first<User>():sql('SELECT u.id,u.handle,u.name FROM users u JOIN sessions s ON s.user=u.id WHERE s.token=? AND s.expires>?',token,Date.now()).first<User>();
   const auth=async()=>{const user=await current();if(!user)fail(401,'Sign in first.');return user;};
   const cookie=(v:string,age:number)=>headers.append('Set-Cookie',`${COOKIE}=${v}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}`);
-  const summary=(o:Office,u:User)=>activitySnapshot(o,u).office;
-  const session=async(u:User)=>{const office=await sql('SELECT id,name,paused FROM offices WHERE owner=?',u.id).first();return{user:u,office:{...office,paused:!!office?.paused}};};
+  const summary=(o:Office&WithMoment,u:User)=>({...activitySnapshot(o,u).office,...momentOf(o,u)});
+  const session=async(u:User)=>{const office=await sql('SELECT o.id,o.name,o.paused,a.value appearance FROM offices o LEFT JOIN appearance a ON a.office=o.id WHERE o.owner=?',u.id).first<{id:string;name:string;paused:number;appearance:string|null}>();return{user:u,office:{...office,paused:!!office?.paused,appearance:office?.appearance?JSON.parse(office.appearance):DEFAULT_APPEARANCE}};};
   const identity=cloudIdentity({req,path,method,origin:origin.origin,db,sql,headers,body:()=>body(req),current,reply},env);
   const authIntent=['/register','/login','/logout'].includes(path)&&method==='POST'?await identity.intent():null;
   const identityResponse=await identity.handle();if(identityResponse)return identityResponse;
@@ -61,6 +64,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
   const live=()=>publisher?`EXISTS(SELECT 1 FROM publisher_tokens WHERE token=${quote(publisherToken)} AND user=${quote(u.id)} AND expires>${Date.now()})`:sessionGuard(token,u.id);
   const activityResponse=await cloudActivity({req,path,method,origin:origin.origin,db,sql,headers,body:()=>body(req),current,reply,user:u,token,publisher,live});if(activityResponse)return activityResponse;
   const humanResponse=await cloudHumans({req,path,method,origin:origin.origin,db,sql,headers,body:()=>body(req),current,reply,user:u,token,publisher,live});if(humanResponse)return humanResponse;
+  const socialResponse=await cloudSocial({req,path,method,origin:origin.origin,db,sql,headers,body:()=>body(req),current,reply,user:u,token,publisher,live});if(socialResponse)return socialResponse;
   if(path==='/session'){if(method!=='GET')fail(405,'Method not allowed.');return reply(200,await session(u));}
   if(method==='POST'||method==='DELETE'){const input=await body(req);const again=await auth();if(again.id!==u.id||(input.actorId!==undefined&&input.actorId!==u.id))fail(409,'Account changed.');
    if(path==='/logout'&&method==='POST'){await identity.check(authIntent);const statements=[sql(`DELETE FROM human_presence WHERE user=? AND ${sessionGuard(token,u.id)} AND ${authGuard}`,u.id),sql(`DELETE FROM sessions WHERE token=? AND ${authGuard}`,token)];if(authIntent)statements.push(sql('UPDATE auth_contexts SET version=version+1 WHERE id=? AND version=?',authIntent.id,authIntent.version));await db.batch(statements);cookie('',0);return reply(200,{ok:true});}
@@ -78,8 +82,8 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
    fail(404,'Endpoint not implemented in this slice.');
   }
   if(method!=='GET')fail(405,'Method not allowed.');
-  if(path==='/floors'){const rows=await sql(`SELECT o.*,u.name ownerName,g.scope,${profileProjection} FROM offices o JOIN users u ON u.id=o.owner LEFT JOIN grants g ON g.office=o.id AND g.user=? WHERE (o.owner=? OR g.user IS NOT NULL) AND ${alive}`,u.id,u.id,token,u.id,Date.now()).all<Office>();return reply(200,{floors:rows.results.map(o=>summary(o,u))});}
-  const office=path.match(/^\/offices\/([\w-]+)$/);if(office){const row=await sql(`SELECT o.*,u.name ownerName,g.scope,${profileProjection} FROM offices o JOIN users u ON u.id=o.owner LEFT JOIN grants g ON g.office=o.id AND g.user=? WHERE o.id=? AND (o.owner=? OR g.user IS NOT NULL) AND ${alive}`,u.id,office[1],u.id,token,u.id,Date.now()).first<Office>();if(!row)fail(404,'Office not found.');return reply(200,activitySnapshot(row,u));}
+  if(path==='/floors'){const rows=await sql(`SELECT o.*,u.name ownerName,g.scope,${profileProjection},${momentProjection()} FROM offices o JOIN users u ON u.id=o.owner LEFT JOIN grants g ON g.office=o.id AND g.user=? WHERE (o.owner=? OR g.user IS NOT NULL) AND ${alive}`,u.id,u.id,token,u.id,Date.now()).all<Office&WithMoment>();return reply(200,{floors:rows.results.map(o=>summary(o,u))});}
+  const office=path.match(/^\/offices\/([\w-]+)$/);if(office){const row=await sql(`SELECT o.*,u.name ownerName,g.scope,${profileProjection},${momentProjection()} FROM offices o JOIN users u ON u.id=o.owner LEFT JOIN grants g ON g.office=o.id AND g.user=? WHERE o.id=? AND (o.owner=? OR g.user IS NOT NULL) AND ${alive}`,u.id,office[1],u.id,token,u.id,Date.now()).first<Office&WithMoment>();if(!row)fail(404,'Office not found.');const snapshot=activitySnapshot(row,u);return reply(200,{...snapshot,office:{...snapshot.office,...momentOf(row,u)}});}
   if(path==='/invites')return reply(200,{invites:(await sql(`SELECT i.id,i.scope,i.expires expiresAt FROM invites i JOIN offices o ON o.id=i.office WHERE o.owner=? AND i.expires>? AND ${alive}`,u.id,Date.now(),token,u.id,Date.now()).all()).results});
   if(path==='/grants')return reply(200,{grants:(await sql(`SELECT g.id,g.scope,u.name userName,u.handle userHandle FROM grants g JOIN offices o ON o.id=g.office JOIN users u ON u.id=g.user WHERE o.owner=? AND ${alive}`,u.id,token,u.id,Date.now()).all()).results});
   fail(404,'Endpoint not implemented in this slice.');

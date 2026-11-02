@@ -58,9 +58,11 @@
     "test:github": "node --experimental-strip-types scripts/github-login-test.mjs",
     "test:github:config": "node scripts/github-config-test.mjs",
     "test:onboarding": "npm run test:onboarding:recovery && npm run test:onboarding:a11y && npm run test:tour && npm run test:onboarding:demo",
-    "test:cloud": "node scripts/cloud-permissions-test.mjs && node scripts/cloud-identity-test.mjs && node scripts/cloud-activity-test.mjs && node scripts/cloud-humans-test.mjs",
+    "test:cloud": "node scripts/cloud-permissions-test.mjs && node scripts/cloud-identity-test.mjs && node scripts/cloud-activity-test.mjs && node scripts/cloud-humans-test.mjs && node scripts/cloud-social-test.mjs && node scripts/cloud-appearance-test.mjs",
     "cloud:dev": "wrangler dev --local --config cloud/wrangler.jsonc",
-    "cloud:migrate:local": "wrangler d1 migrations apply office-permissions-local --local --config cloud/wrangler.jsonc"
+    "cloud:migrate:local": "wrangler d1 migrations apply office-permissions-local --local --config cloud/wrangler.jsonc",
+    "cloud:office": "npm run build && npm run cloud:migrate:local && npm run cloud:dev",
+    "test:cloud:ui": "npm run build && node scripts/cloud-ui-test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/bitcount-prop-single": "^5.3.0",
