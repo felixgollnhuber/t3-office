@@ -5,6 +5,7 @@ import net from 'node:net';
 import { t3Api } from './server/t3.ts';
 import { t3Costs } from './server/costs.ts';
 import { buildingApi } from './server/building.ts';
+import { localGitHubBroker } from './server/github-local.ts';
 
 interface ProjectRef {
   owner: string;
@@ -172,7 +173,7 @@ function privateDataBoundary(): Plugin {
   return { name: 'office-private-data-boundary', configureServer: mount, configurePreviewServer: mount };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   server: {
     host: 'localhost', port: 5173, strictPort: true,
     fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.local/**', '**/*.sqlite*', '**/*.key'] },
@@ -185,8 +186,8 @@ export default defineConfig({
   // Enable only on a loopback companion instance when deliberately using the bridge.
   plugins: [
     privateDataBoundary(),
-    buildingApi({ dbPath: process.env.BUILDING_DB }),
+    buildingApi({ dbPath: process.env.BUILDING_DB, github: localGitHubBroker(command === 'serve' && process.env.OFFICE_GITHUB_LOGIN === '1') }),
     ...(process.env.T3_LOCAL_DATA === '1' ? [githubBoard(), t3Api(), t3Costs()] : []),
     ipv4Bridge(),
   ],
-});
+}));
