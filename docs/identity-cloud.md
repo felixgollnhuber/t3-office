@@ -54,3 +54,24 @@ Cloudflare documents D1 and SQLite-backed Durable Objects as storage choices; Du
 `node:sqlite`, synchronous Node HTTP handlers and the current in-memory presence assumptions are not drop-in Workers implementations. Do not route production traffic to a second partially implemented backend. First reuse the permission fixtures against an adapter, preserving single-use invitations, separate human admission, sequence-based history, retention, moderation receipts, cross-user isolation and revocation.
 
 A useful first hosted trial should include two separate computers using synthetic work data, reconnect and concurrent-device tests, deletion/retention checks, operational recovery and an agreed cost cap. Public resources, deployment, real-data publication and external OAuth activation require separate authorization; no automatic deployment or daily Git automation is active.
+
+
+## OFF-025 first Worker/D1 permission slice
+
+Implemented and verified locally: cloud/worker.ts, cloud/migrations/0001_permissions.sql and cloud/wrangler.jsonc. The prototype implements password accounts using the existing scrypt parameters, seven-day hashed cookie sessions, private office summaries, 24-hour single-use scoped invitations, grant listing and owner revocation. D1 batches atomically create user/office/session and redeem invitations; first-primary database sessions avoid deliberately routing authorization reads to stale replicas. The cloud cookie has a separate name from the existing office session so the local experiments cannot replace each other's login cookie.
+
+The prototype is isolated: configured/request origins must match a loopback origin, workers.dev and preview URLs are disabled, the database ID is a local placeholder, no cloud resources/credentials are configured, and unsupported private/OAuth/chat/publication routes fail closed. No current local identities, grants or private T3 data are migrated. Scope labels are preserved, but there is no activity payload yet: all summaries are offline and agent arrays empty. The existing office on5173 remains on its original backend; do not point the full UI at this incomplete service. The initial abuse control is a shared local20-attempt/15-minute counter, not production abuse protection. Production CPU/cost budgets, recovery, durable OAuth state and cloud origins/cookies still need review.
+
+Local commands (from repository root):
+
+```sh
+npm run test:cloud
+npm run cloud:migrate:local
+npm run cloud:dev
+```
+
+The last command starts only the permission API at http://127.0.0.1:8787, not another office UI. Local state is ignored under cloud/.wrangler/. Do not add --remote or run deployment commands as part of these checks. The documented Workers [local development](https://developers.cloudflare.com/d1/best-practices/local-development/) and D1 [database/batch API](https://developers.cloudflare.com/d1/worker-api/d1-database/) underpin this adapter.
+
+Tests compile the actual Worker and use local workerd/Miniflare plus D1 in disposable storage. The installed Miniflare5 release exports convertV4MiniflareOptions; the test harness uses that explicit compatibility conversion and inline compiled source. Direct use of the older constructor and temporary scriptPath initially failed before this correction. The exact tested dev-tool versions are pinned in package.json and package-lock.json; Miniflare is currently a beta dependency, so future upgrades require rerunning these checks.
+
+Next slices: durable provider challenge/confirmation/session flow against cloud storage; publication transport and admitted human/chat policies; a reviewed frontend transport integration preserving original home/HUD. Production provisioning, domains, secrets and a hosted two-person trial remain separately gated. This foundation alone is not internet multiplayer.

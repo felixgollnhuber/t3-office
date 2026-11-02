@@ -39,7 +39,7 @@
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p . && tsc -p tsconfig.node.json",
+    "typecheck": "tsc -p . && tsc -p tsconfig.node.json && tsc -p cloud/tsconfig.json",
     "add-set": "node scripts/add-set.mjs",
     "test": "node --experimental-strip-types --test server/building.test.ts server/accounting.test.ts server/github-identity.test.ts server/github-login.test.ts server/github-local.test.ts scripts/bridge.test.mjs",
     "bridge": "node scripts/bridge.mjs",
@@ -57,7 +57,10 @@
     "test:ui-input": "node scripts/ui-input-test.mjs",
     "test:github": "node --experimental-strip-types scripts/github-login-test.mjs",
     "test:github:config": "node scripts/github-config-test.mjs",
-    "test:onboarding": "npm run test:onboarding:recovery && npm run test:onboarding:a11y && npm run test:tour && npm run test:onboarding:demo"
+    "test:onboarding": "npm run test:onboarding:recovery && npm run test:onboarding:a11y && npm run test:tour && npm run test:onboarding:demo",
+    "test:cloud": "node scripts/cloud-permissions-test.mjs",
+    "cloud:dev": "wrangler dev --local --config cloud/wrangler.jsonc",
+    "cloud:migrate:local": "wrangler d1 migrations apply office-permissions-local --local --config cloud/wrangler.jsonc"
   },
   "dependencies": {
     "@fontsource-variable/bitcount-prop-single": "^5.3.0",
@@ -68,9 +71,12 @@
     "vite": "^8.3.4"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20261102.1",
     "@types/node": "^26.6.5",
     "@types/three": "^0.186.0",
+    "miniflare": "5.20261102.0-beta",
     "playwright": "^1.64.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wrangler": "4.156.2"
   }
 }
