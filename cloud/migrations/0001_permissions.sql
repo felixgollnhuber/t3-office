@@ -1,0 +1,10 @@
+PRAGMA foreign_keys=ON;
+CREATE TABLE users(id TEXT PRIMARY KEY,handle TEXT NOT NULL UNIQUE,name TEXT NOT NULL,salt TEXT NOT NULL,password TEXT NOT NULL);
+CREATE TABLE offices(id TEXT PRIMARY KEY,owner TEXT NOT NULL UNIQUE REFERENCES users(id),name TEXT NOT NULL);
+CREATE TABLE sessions(token TEXT PRIMARY KEY,user TEXT NOT NULL REFERENCES users(id),expires INTEGER NOT NULL);
+CREATE INDEX sessions_user ON sessions(user);
+CREATE TABLE invites(id TEXT PRIMARY KEY,token TEXT NOT NULL UNIQUE,office TEXT NOT NULL REFERENCES offices(id),scope TEXT NOT NULL CHECK(scope IN ('presence','activity')),expires INTEGER NOT NULL);
+CREATE INDEX invites_office ON invites(office);
+CREATE TABLE grants(id TEXT PRIMARY KEY,office TEXT NOT NULL REFERENCES offices(id),user TEXT NOT NULL REFERENCES users(id),scope TEXT NOT NULL CHECK(scope IN ('presence','activity')),UNIQUE(office,user));
+CREATE INDEX grants_user ON grants(user);
+CREATE TABLE auth_limits(key TEXT PRIMARY KEY,count INTEGER NOT NULL,expires INTEGER NOT NULL);

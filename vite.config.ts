@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import net from 'node:net';
 import { t3Api } from './server/t3.ts';
 import { t3Costs } from './server/costs.ts';
+import { buildingApi } from './server/building.ts';
+import { localGitHubBroker } from './server/github-local.ts';
 
 interface ProjectRef {
   owner: string;
@@ -139,7 +141,7 @@ function ipv4Bridge(): Plugin {
     server.httpServer?.once('listening', () => {
       const addr = server.httpServer!.address();
       if (!addr || typeof addr === 'string' || addr.address === '127.0.0.1') return;
-      net
+      const bridge = net
         .createServer((sock) => {
           const up = net.connect(addr.port, addr.address);
           sock.pipe(up).pipe(sock);
@@ -148,16 +150,44 @@ function ipv4Bridge(): Plugin {
         })
         .on('error', () => {})
         .listen(addr.port, '127.0.0.1');
+      server.httpServer!.once('close', () => bridge.close());
     });
   };
   return { name: 'office-ipv4-bridge', configureServer: mount, configurePreviewServer: mount };
 }
 
-export default defineConfig({
-  server: { host: 'localhost', port: 5173, strictPort: true },
+/** A shared building never falls through to private local APIs, even through Vite's SPA fallback. */
+function privateDataBoundary(): Plugin {
+  const mount = (server: ViteDevServer | PreviewServer) => {
+    server.middlewares.use((req, res, next) => {
+      const path = (req.url ?? '').split('?')[0];
+      if (!/^\/api\/(t3(?:\/|$)|board(?:\/|$))/.test(path)) return next();
+      const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress ?? '');
+      if (process.env.T3_LOCAL_DATA === '1' && local) return next();
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(JSON.stringify({ error: 'Private local data is disabled on this building server.' }));
+    });
+  };
+  return { name: 'office-private-data-boundary', configureServer: mount, configurePreviewServer: mount };
+}
+
+export default defineConfig(({ command }) => ({
+  server: {
+    host: 'localhost', port: 5173, strictPort: true,
+    fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.local/**', '**/*.sqlite*', '**/*.key'] },
+  },
   // `npm start` / `npx t3-office`: the built office with the same local API; takes the next free port if 5173 is busy
   preview: { host: 'localhost', port: 5173 },
   // three.js and the whole office in one chunk is fine for a page that is served locally
   build: { chunkSizeWarningLimit: 1500 },
-  plugins: [githubBoard(), ipv4Bridge(), t3Api(), t3Costs()],
-});
+  // The shared application never exposes the machine owner's private T3 data.
+  // Enable only on a loopback companion instance when deliberately using the bridge.
+  plugins: [
+    privateDataBoundary(),
+    buildingApi({ dbPath: process.env.BUILDING_DB, github: localGitHubBroker(command === 'serve' && process.env.OFFICE_GITHUB_LOGIN === '1') }),
+    ...(process.env.T3_LOCAL_DATA === '1' ? [githubBoard(), t3Api(), t3Costs()] : []),
+    ipv4Bridge(),
+  ],
+}));

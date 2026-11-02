@@ -2,7 +2,7 @@
   "name": "t3-office",
   "version": "0.1.0",
   "private": true,
-  "description": "A pixel-art office that shows what your T3 Code agents are doing, live.",
+  "description": "Invitation-based collaborative building for T3 Office, with private agent activity sharing.",
   "keywords": [
     "t3-code",
     "agents",
@@ -15,14 +15,6 @@
     "visualization",
     "vite"
   ],
-  "homepage": "https://github.com/felixgollnhuber/t3-office#readme",
-  "bugs": {
-    "url": "https://github.com/felixgollnhuber/t3-office/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/felixgollnhuber/t3-office.git"
-  },
   "author": "Felix Gollnhuber",
   "license": "MIT",
   "type": "module",
@@ -40,15 +32,45 @@
     "tsconfig.node.json"
   ],
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22.18"
   },
   "scripts": {
     "start": "node bin/t3-office.mjs --build",
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p . && tsc -p tsconfig.node.json",
-    "add-set": "node scripts/add-set.mjs"
+    "typecheck": "tsc -p . && tsc -p tsconfig.node.json && tsc -p cloud/tsconfig.json",
+    "add-set": "node scripts/add-set.mjs",
+    "test": "node --experimental-strip-types --test server/building.test.ts server/accounting.test.ts server/github-identity.test.ts server/github-login.test.ts server/github-local.test.ts scripts/bridge.test.mjs",
+    "bridge": "node scripts/bridge.mjs",
+    "serve": "vite preview",
+    "test:e2e": "node scripts/ui-input-test.mjs && node scripts/building-view-test.mjs && node scripts/elevator-test.mjs && node scripts/menu-races.mjs && node scripts/smoke.mjs && node scripts/social-test.mjs && node scripts/doorbell-test.mjs && node scripts/humans-test.mjs",
+    "local": "node bin/local-office.mjs",
+    "demo:friends": "node scripts/friend-preview.mjs",
+    "test:social": "node scripts/social-test.mjs",
+    "test:tour": "node scripts/friend-preview.mjs --check-tour",
+    "test:doorbell": "node scripts/doorbell-test.mjs",
+    "test:humans": "node scripts/humans-test.mjs",
+    "test:onboarding:recovery": "node scripts/onboarding-recovery-test.mjs",
+    "test:onboarding:a11y": "node scripts/onboarding-accessibility-test.mjs",
+    "test:onboarding:demo": "node scripts/onboarding-demo-test.mjs",
+    "test:ui-input": "node scripts/ui-input-test.mjs",
+    "test:github": "node --experimental-strip-types scripts/github-login-test.mjs",
+    "test:github:config": "node scripts/github-config-test.mjs",
+    "test:onboarding": "npm run test:onboarding:recovery && npm run test:onboarding:a11y && npm run test:tour && npm run test:onboarding:demo",
+    "test:cloud": "node scripts/cloud-permissions-test.mjs && node scripts/cloud-identity-test.mjs && node scripts/cloud-activity-test.mjs && node scripts/cloud-humans-test.mjs && node scripts/cloud-social-test.mjs && node scripts/cloud-appearance-test.mjs && node scripts/cloud-hosted-test.mjs",
+    "cloud:dev": "wrangler dev --local --config cloud/wrangler.jsonc",
+    "cloud:migrate:local": "wrangler d1 migrations apply office-permissions-local --local --config cloud/wrangler.jsonc",
+    "cloud:office": "npm run build && npm run cloud:migrate:local && npm run cloud:dev",
+    "test:cloud:ui": "npm run build && node scripts/cloud-ui-test.mjs",
+    "test:hud-layout": "node scripts/hud-layout-test.mjs",
+    "cloud:trial:preflight": "npm run build && node scripts/cloud-trial.mjs preflight",
+    "cloud:trial:migrate": "wrangler d1 migrations apply t3-office-trial --remote --env trial --config cloud/wrangler.jsonc",
+    "cloud:trial:deploy": "npm run cloud:trial:preflight && wrangler deploy --env trial --config cloud/wrangler.jsonc",
+    "cloud:trial:smoke": "node scripts/cloud-trial.mjs smoke",
+    "cloud:trial:close": "wrangler deploy --env trial --config cloud/wrangler.jsonc --var API_OPEN:0",
+    "cloud:trial:logs": "wrangler tail --env trial --config cloud/wrangler.jsonc",
+    "cloud:trial:backup": "mkdir -p .local/backups && wrangler d1 export t3-office-trial --remote --env trial --config cloud/wrangler.jsonc --output .local/backups/trial-$(date -u +%Y%m%dT%H%M%SZ).sql"
   },
   "dependencies": {
     "@fontsource-variable/bitcount-prop-single": "^5.3.0",
@@ -59,9 +81,13 @@
     "vite": "^8.3.4"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20261102.1",
     "@types/node": "^26.6.5",
     "@types/three": "^0.186.0",
+    "esbuild": "0.28.2",
+    "miniflare": "5.20261102.0-beta",
     "playwright": "^1.64.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wrangler": "4.156.2"
   }
 }

@@ -1,0 +1,68 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "t3-office-permission-prototype",
+  "main": "worker.ts",
+  "compatibility_date": "2026-11-02",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "send_metrics": false,
+  "dev": {
+    "ip": "127.0.0.1",
+    "port": 8787
+  },
+  "vars": {
+    "APP_ORIGIN": "http://localhost:8787"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "office-permissions-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "assets": {
+    "directory": "../dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "single-page-application"
+  },
+  "env": {
+    "trial": {
+      "name": "t3-office-trial",
+      "workers_dev": true,
+      "preview_urls": false,
+      "vars": {
+        "APP_ORIGIN": "https://t3-office-trial.REPLACE-WITH-ACCOUNT-SUBDOMAIN.workers.dev",
+        "ALLOW_PASSWORD_SIGNUP": "0",
+        "API_OPEN": "1",
+        "GITHUB_ALLOWED_LOGINS": "REPLACE-WITH-GITHUB-LOGINS"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "t3-office-trial",
+          "database_id": "REPLACE-AFTER-D1-CREATE",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "assets": {
+        "directory": "../dist",
+        "binding": "ASSETS",
+        "run_worker_first": true,
+        "not_found_handling": "single-page-application"
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+        "logs": {
+          "enabled": true,
+          "invocation_logs": false
+        }
+      }
+    }
+  }
+}

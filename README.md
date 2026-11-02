@@ -1,331 +1,165 @@
-<div align="center">
+<img src="assets/icon.svg" width="64" height="64" alt="">
 
-<img src="docs/media/hero.gif" alt="T3 Office in demo mode: agents type at their desks, one rings the gong for a merged pull request, others high-five over passing tests and shred old context, with the clock, team status, receipt, DJ booth and grapevine around them" width="100%">
+# T3 Office — friends in the building
 
-# T3 Office
+Your original pixel-art office, with an optional **Friends & characters** menu. Based on [Felix Gollnhuber's T3 Office](https://github.com/felixgollnhuber/t3-office).
 
-**Your AI agents, as pixel-art coworkers.**
+## First visit
 
-A living office that shows what your [T3 Code](https://t3.codes) threads are doing, live.<br>
-Every thread is a colleague at a desk: they type while the agent works, knock on the boss's door when they need you,
-and go home when the job is done.
-
-[![CI](https://github.com/felixgollnhuber/t3-office/actions/workflows/ci.yml/badge.svg)](https://github.com/felixgollnhuber/t3-office/actions/workflows/ci.yml)
-[![MIT License](https://img.shields.io/badge/license-MIT-2f6f73?style=flat-square)](LICENSE)
-[![Node 22.13+](https://img.shields.io/badge/node-%E2%89%A5%2022.13-d9774f?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![three.js](https://img.shields.io/badge/three.js-r186-1d1d1d?style=flat-square&logo=threedotjs)](https://threejs.org)
-[![Read-only](https://img.shields.io/badge/your%20data-read--only%20%26%20local-5f8a4a?style=flat-square)](#privacy)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-e7a948?style=flat-square)](CONTRIBUTING.md)
-
-[**Quick start**](#quick-start) · [**Live demo**](https://felixgollnhuber.github.io/t3-office/) · [**What happens in the office**](#what-happens-in-the-office) · [**Contributing**](CONTRIBUTING.md)
-
-</div>
-
-<br>
-
-You have eight agents running. Which one is stuck? Which one waits for your answer? Which one just burned through its
-context window? Instead of clicking through threads, look at the office: it answers all of that at a glance, and it is
-a lot more fun to have on a second screen than a list of spinners.
-
-> [!NOTE]
-> Unofficial fan project. Not affiliated with or endorsed by T3 Code or its authors.
-
-## Quick start
-
-All you need is [Node.js](https://nodejs.org) 22.13 or newer:
+Requires Node.js 22.18 or newer; Node 24 recommended.
 
 ```sh
-npx github:felixgollnhuber/t3-office
+npm ci
+npm run dev
 ```
 
-That's it. The first run downloads and builds the office, then <http://localhost:5173> opens in your browser and
-your T3 Code threads walk in. Nothing to configure, no account, no API key.
+Open http://localhost:5173. Start in your original full-screen office; no account or AI provider is required. **Show me around** starts the optional first-user guide. Click a coworker to customize it, or open **People & chat → Friends** to create a local account and invite someone. Open the invitation in a private window to try a second account. Accounts created on this normal server persist in ignored `.local/building.sqlite`; passwords need at least12 characters and there is no account recovery yet.
 
-No T3 Code on this machine? Then you get a simulated office full of busy agents, so you can look around anyway. Or
-skip the install entirely and open the [**live demo**](https://felixgollnhuber.github.io/t3-office/).
+The default service disables private T3 data routes. Accepting an invitation grants only its stated office scope; human conversations still require the host to open the room, admit the guest and each participant to enter explicitly. The guide does not create invitations, grant access or publish activity for you. Pause/resume, Skip and replay are available; guide hints store only step/timestamp/pause state in this browser session.
 
-<details>
-<summary><b>Other ways to run it</b></summary>
-
-<br>
-
-**From a clone**, if you want to tinker or stay on the latest `main`:
+## Connect your own local T3 agents
 
 ```sh
-git clone https://github.com/felixgollnhuber/t3-office.git
-cd t3-office
-npm install
-npm start          # build and open the office
-npm run dev        # or: development server with hot reload
+npm run local
 ```
 
-**Options:**
+Open http://localhost:5173. The local launcher explicitly enables the read-only T3 connection on loopback. The original HUD, characters, interactions, themes, music and usage views remain. If T3 Code is unavailable, the original simulation is used. Do not expose this private companion to other computers; use the explicit publication bridge below.
 
-```text
-npx github:felixgollnhuber/t3-office --port 8080     another port (default 5173, or the next free one)
-npx github:felixgollnhuber/t3-office --no-open      don't open the browser
-```
+For a guaranteed simulated office, use `/?source=demo&weather=clear`. To use another port: `npm run local -- --port 5174`. The untouched upstream revision is b14eb1c1f02933df071f62f32f79ed954dceadd8; its license and source provenance are preserved. The original reference README is [here](docs/upstream-readme.md).
 
-Add `?source=demo` to the URL to see the simulation even when T3 Code is running.
+## Names, work areas and friends
 
-</details>
+Open **Friends & characters** from the existing clock panel. In phone/kiosk mode a small menu button remains available.
 
-## What happens in the office
+Use the **Building view** button to zoom out into the interactive building on the original office canvas. It reuses the original pixel renderer, toon shading, textures, character models, lighting and clock/music HUD. Navigation is a small in-scene toolbar; **Floors** opens the optional directory, and selecting a floor opens its themed inspector. Click a floor or its label to zoom into that office; choose **Enter this office** to visit it. **Whole building** zooms back out, and **Back to office** closes the overview. Drag to turn the model and scroll over it to zoom. Only owned/granted floors appear; presence-only interiors stay opaque. You can also open `/?building=1` directly. Without an account, your own floor remains available and Friends & invitations opens the existing optional menu.
 
-The office is not decoration: almost everything in it means something.
+- **Click a character:** the side sheet opens on **Customize**. Rename the coworker, choose a work area, hairstyle, outfit, skin/hair/clothing colors or glasses, then **Save character**. A successful save closes the sidebar and smoothly returns the camera to the full office view. Changes apply without a reload and persist in this browser without an account. **Overview** and the existing thread reader remain available. Typing in the editor does not trigger office keyboard shortcuts. Friends’ characters remain read-only. **Your characters** in the menu is a picker that opens the same sidebar.
+- **Friends:** optionally create/sign into a building account. Create a presence-only or activity invitation. Recipients sign in and explicitly accept the single-use link. The elevator selector shows only your own and invited floors, with a current-floor marker and online windows. Choosing another floor pulls the camera back to a cutaway building, closes the cabin doors, moves the elevator and changes its indicator, then opens the destination doors with a camera move into the office. Animation takes about two seconds, plus actual loading. **Skip animation** and system reduced-motion preferences bypass motion; neither bypasses access checks or office loading. Choosing a floor opens its office full screen. The **← Your floor** button is always available while visiting; floor numbers are positions in your authorized directory, not permanent building addresses.
+- **Office style:** choose any of the four original themes, Original/Focus/Lounge furniture presets and Original/Warm/Cool lighting. Focus opens the break area by removing lounge furniture; Lounge adds sofa, beanbags and table tennis. Desk capacity and navigation remain unchanged. Preferences persist on this browser, without an account. Applying with an account also saves the room style for activity guests; starting browser sharing synchronizes the current look. Applying reloads the office and stops browser publishing until you explicitly start it again. Presence-only guests do not receive room preferences.
+- **Sharing:** see exactly which guests have permission and what each can see, refresh/revoke access, and check the last server-received activity timestamp. This is a permission list, not a live viewer count. Browser publication and server freshness are shown separately because an external bridge may still be publishing. Explicitly choose **Share this office with my invited friends** to publish current character names, chosen work areas, provider, status and any customized character appearance. It starts off and is never resumed automatically on reload. No prompts, task titles, projects, paths, tools, conversations, context usage or costs are published. Closing the page stops new heartbeats; the shared office becomes offline after 45 seconds. **Stop sharing** pauses the office and immediately clears its snapshot.
 
-| When an agent … | … in the office |
-|---|---|
-| works | it types; the monitor shows what it does right now: terminal, edits, searches, test runs |
-| waits for your answer | it queues at the boss's door with a raised hand, and Ping the dog keeps the longest-waiting one company |
-| searches the web | it walks over to the bookshelf |
-| fills its context window | the paper stack on its desk grows, and goes to the shredder on compaction |
-| starts subagents | they pull up a stool next to it, or the whole group meets in the meeting room |
-| orchestrates other threads | it gets the glass office and walks over to whoever it messages |
-| gets a pull request merged | the gong rings |
-| breaks CI | the warning light turns on |
-| turns the tests green | high five |
-| is idle for hours | it naps in a sleeping pod |
-| is done | it goes home |
+Presence-only friends see online/offline state without names, work areas, agent counts or agents. Activity guests see only the fields you selected for sharing, including owner-chosen names and areas. Invitations last 24 hours and can be used once. Cancel invitations or revoke visitors in the menu. Authorization is checked on every read; a viewer refreshes normally every three seconds with seven-second request timeouts. A recipient may retain information already seen.
 
-And around them: the server room runs hot with the load, the boss gets nervous when a provider's quota runs low, and
-when it is used up, the lights go out.
+Accounts, grants, office character labels and snapshots persist in ignored `.local/building.sqlite`; use `BUILDING_DB` to select another path. Local-only aliases are in browser storage. Passwords use salted scrypt, and credentials are stored hashed. There is no email or account recovery yet. Profile/office names are visible to accepted visitors, so choose suitable names.
 
-<p align="center">
-  <img src="docs/media/boss.png" alt="Agents waiting for an answer queue at the boss's glass office with raised hands while Ping the dog keeps them company" width="100%">
-  <br>
-  <sub>Three threads wait for an answer. Ping keeps them company; the boss works under the quota wall.</sub>
-</p>
+## Separate shared service and CLI bridge
 
-<table>
-  <tr>
-    <td width="50%"><img src="docs/media/agent-sheet.png" alt="An agent at their desk with the agent sheet open: status, task, tokens per second, tool calls, files, cost, context and recent tool history"></td>
-    <td width="50%"><img src="docs/media/costs.png" alt="The cost view: a long thermal receipt with cost and tokens by model, day, project and thread"></td>
-  </tr>
-  <tr>
-    <td><b>Look over their shoulder.</b> Click anyone for status, task, tool calls, files, cost and context. The
-    Thread tab shows the conversation; double-click opens it in T3 Code.</td>
-    <td><b>Know what it costs.</b> Today's runs, tokens and cost on a receipt; click it for the full view by model,
-    day, project and thread.</td>
-  </tr>
-  <tr>
-    <td><img src="docs/media/night-rain.png" alt="The office at night in the rain, desk lamps on, rain running down the windows"></td>
-    <td><img src="docs/media/party.png" alt="The Boiler Room style office with lasers, haze and moving heads over the dance floor"></td>
-  </tr>
-  <tr>
-    <td><b>Real daylight, real weather.</b> The sun follows your location, the weather comes from Open-Meteo, and
-    there is a night shift.</td>
-    <td><b>DJ booth.</b> A generative lo-fi radio, or YouTube DJ sets with a light show that follows the beat. Calm
-    for lo-fi, a dance floor for a Boiler Room set.</td>
-  </tr>
-</table>
+For a building service that does not read any private local data, use `npm run dev`, or `npm run build` followed by `npm run serve`. Both start on loopback and disable private `/api/t3/*` and `/api/board` routes. The home screen remains an office; no data means the original demo. Public deployment still needs reviewed TLS/proxy, identity/abuse/recovery and backup configuration; this release is verified locally, not publicly hosted.
 
-<p align="center">
-  <img src="docs/media/themes.png" alt="The four office styles side by side: campus, loft, soma and boiler" width="100%">
-  <br>
-  <sub>Four office styles: Valley Campus, Lo-Fi Loft, SoMa Warehouse and Boiler Room (<code>?theme=campus|loft|soma|boiler</code>).</sub>
-</p>
+A participant can also publish using a separate loopback companion:
 
-## Features
+1. In **Friends & characters → Sharing**, create a publisher key. Save it outside the repository in a local file with permissions `600`, such as `~/.config/t3-office/publisher.key`.
+2. Run the companion on the participant's own machine:
 
-- **Your threads as people.** Projects sit together as teams, subagents sit next to their parent, the orchestrator
-  thread gets the glass office.
-- **The agent sheet** with status, task, tool calls, files, cost, context and a pixel-style reader for the thread.
-- **Real events.** Merged pull requests, failing CI, green tests, compactions and quota limits all show up as
-  something happening in the room.
-- **Rooms.** A server room that runs hot with the load, a meeting room, sleeping pods, a kitchen, a library.
-- **Ping, Null and Cron.** The office dog, the cat and the robot vacuum. Click them. Double-click them.
+   ```sh
+   npm run local -- --port 5174
+   ```
 
-  <img src="docs/media/pets.png" alt="Ping the dog with a heart, Null the cat purring on her cat tree, and Cron the robot vacuum on a cleaning run" width="100%">
+3. Explicitly start the bridge:
 
-- **Numbers.** The receipt, the full cost view, a quota wall with provider limits, and a pinboard with your GitHub
-  Projects.
-- **DJ booth** with generative lo-fi and YouTube DJ sets, plus lasers, haze and moving heads driven by a beat analysis.
-- **Real daylight, weather and seasons** for your location, with a night shift. Halloween and Christmas included.
-- **Second screen mode.** A director camera that cuts to whatever happens, and a kiosk mode without panels
-  (`?kiosk=1&director=1`). Phones start like this on their own; `?kiosk=0` brings the panels back.
+   ```sh
+   npm run bridge -- --server http://localhost:5173 --source http://localhost:5174 --token-file ~/.config/t3-office/publisher.key
+   ```
 
-  <img src="docs/media/kiosk.png" alt="Kiosk view at golden hour without panels: an agent waits at the boss's door with the dog, two agents high-five, the rest work at their desks" width="100%">
+The CLI sends up to 24 pseudonymous IDs, providers and statuses every 10 seconds, without raw thread IDs or work details. For a remote building, use an HTTPS origin. It rejects remote HTTP, non-loopback sources and redirects. Never tunnel the private companion. Publisher keys can only publish their owner's office, expire after 30 days and can be revoked. A revoked key cannot read offices or edit character labels.
 
-- **Four office styles**, a settings menu (`,`), English and German.
+CLI IDs are stable across restarts with the same key so server-side names/areas survive; rotating the key changes identities. CLI characters start with generic names and General areas; edit published character labels through your account's character menu when viewing a shared office. Browser sharing uses its own stable local identities. Use one publisher per office to avoid competing snapshots. A missing companion clears activity rather than substituting a demo. Restart the CLI after resuming if it exited on a pause response.
 
-## Privacy
+## Usage figures
 
-T3 Office is **read-only** and **local**. It never writes to T3 Code, sends no messages and changes no settings.
+The small **Receipt · today** counts processed tokens from completed T3 turns since local midnight, including cached input once. Reasoning tokens are already part of output and are not added again. This fixes the earlier receipt undercount. Its cost remains a simpler API-price estimate.
 
-- Threads, projects and quotas come from T3 Code's local state in `~/.t3`. The SQLite database is opened read-only.
-- The cost view reads the same provider transcripts T3 Code's usage page uses (`~/.claude/projects`,
-  `~/.codex/sessions`). Costs are estimates at API list prices, not your actual subscription bill.
-- The server only listens on `localhost`. There is no telemetry.
+The detailed usage view aggregates provider-native sessions over its selected range, including sessions outside T3. The reader now supports T3 Code 0.1.3’s v9 scan cache and older v5–v8 caches, uses the newest supported generation without merging overlapping caches, and validates cumulative Codex counters. Equal-sized genuine requests are counted; duplicate events and copied fork history are not. Append checkpoints validate the 64 bytes before their saved offset; same-size files with changed modification times are rescanned. Arbitrary earlier edits combined with an append are not fully detected by this boundary guard. Final JSONL tails count once, large files are read fully, and retained deleted-session history is preserved. Billing-model hints respect user overrides and aliases. Read failures are reported rather than presenting an uncached partial total as complete.
 
-The only requests that leave your machine are the ones you would expect:
+The detail receipt shows its cache version and source refresh time; results may be cached for 45 seconds. These figures still need matching ranges, timezone and source scope for comparison, and API estimates are separate from subscription billing. The public/static demo is simulated. Confirmed implementation defects were fixed using synthetic regression fixtures and comparison with installed application code; the user’s exact paired figures have not been numerically reconciled.
 
-| Request | When | How to turn it off |
-|---|---|---|
-| [Open-Meteo](https://open-meteo.com) weather | every ~10 minutes with the weather on *Real* (default); sends the configured coordinates rounded to ~1 km, nothing else | set Weather to *Simulated* in the settings, or `?weather=sim` |
-| YouTube | when you play a DJ set | don't play a set; the lo-fi radio is generated locally |
-| GitHub, through your `gh` CLI | when you configure the pinboard | don't configure it |
-
-The default location is Vienna. Your real position is only used if you press "Use my location" in the settings, and
-then it is stored in your browser only.
-
-T3 Code's files are internal, not a public API. When an update changes them, the office falls back to demo data
-instead of crashing.
-
-## Configuration
-
-Everything in the office has a setting: press `,` or click the gear next to the clock. Settings are stored in your
-browser. For everything else:
-
-<details>
-<summary><b>Environment variables</b></summary>
-
-<br>
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `T3_HOME` | `~/.t3` | Where T3 Code keeps its state |
-| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code transcripts, for the cost view |
-| `CODEX_HOME` | `~/.codex` | Codex sessions, for the cost view |
-
-</details>
-
-<details>
-<summary><b>Pinboard: your GitHub Projects</b></summary>
-
-<br>
-
-Create `office.config.json` in the folder you start the office from (for a clone: copy
-`office.config.example.json`):
-
-```json
-{ "github": { "projects": [{ "owner": "your-login-or-org", "number": 1 }] } }
-```
-
-The board is fetched through the [GitHub CLI](https://cli.github.com), so `gh auth login` must have been run with
-access to those projects (`gh auth refresh -s read:project` if needed).
-
-</details>
-
-<details>
-<summary><b>DJ sets and the light show</b></summary>
-
-<br>
-
-Sets live in `src/sets.json`. To add one and give it a light show:
+## Verification
 
 ```sh
-npm run add-set -- "https://www.youtube.com/watch?v=…" --start 120
+npm test
+npm run build
+npx playwright install chromium
+npm run test:e2e
 ```
 
-This needs [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) and [`ffmpeg`](https://ffmpeg.org) on your `PATH`. The script
-downloads the audio to a temp folder, measures beats, bass, mids, highs, drops and breakdowns, and writes the result
-to `public/sets/<videoId>.json` (a few hundred KB of numbers, no audio). It is deterministic and takes about 20
-seconds per set. `--title` and `--artist` override what YouTube reports. Sets without an analysis still play; the
-lights then just pulse at the listed tempo. Some videos cannot be embedded; the booth then offers a link instead.
+Tests use synthetic accounts/sources and an isolated database. Browser checks cover original office/HUD startup without an account, persistent names and areas, explicit sharing, invitations, renderer updates, pause/revocation, saved room styles and guest rendering, elevator/home navigation, sharing visibility, mobile and German menus. Screenshots are ignored under `shots/`. No real prompts or provider transcripts are used in development tests. Local CI configuration exists; no remote CI or deployment has run.
 
-</details>
+## Project records
 
-<details>
-<summary><b>URL parameters</b></summary>
+- [SECURITY.md](SECURITY.md): privacy boundaries.
+- [Identity and cloud notes](docs/identity-cloud.md): GitHub sign-in and the Worker/D1 backend.
+- [Hosted trial runbook](docs/hosting.md): Cloudflare setup, limits, backups and shutdown.
 
-<br>
+Felix Gollnhuber's MIT license and authorship are retained; this branch builds on upstream `main` (b14eb1c). Elevator travel uses a compact stylized cutaway animation. Human office chat is available locally; remote agent control remains outside this release. Created in [T3 Code](https://t3.codes).
 
-| Parameter | Meaning |
-|---|---|
-| `source=demo` | Demo data instead of T3 Code |
-| `lang=en` / `lang=de` | Language for this page view |
-| `theme=campus` | Office style: `campus` (default), `loft`, `soma`, `boiler` |
-| `time=23:00` | Pretend it is that time of day |
-| `speed=60` | Let the clock run faster |
-| `lat=48.21&lon=16.37` | Location for daylight, seasons and real weather (default: Vienna) |
-| `weather=rain` | Weather: `real` (default), `sim`, or pinned to `clear`, `rain`, `storm`, `snow` |
-| `season=winter` | Seasonal decoration: `auto` (default), `off`, `halloween`, `winter`, `christmas` |
-| `director=1` | Director camera: the camera moves by itself |
-| `kiosk=1` | Hide the HUD panels (combine with `director=1` for a second screen) |
-| `tags=quiet` | Name tags: `auto`, `full` or `quiet` |
-| `px=2` | Size of an art pixel in CSS pixels |
-| `hours=12` | How far back threads are loaded |
+## Try a simulated friend
 
-Parameters that are also settings win over the stored setting for that page view. On a phone, `director`, `kiosk` and
-`tags` start as `1`, `1` and `quiet` until a parameter or the settings menu says otherwise.
+Run `npm run demo:friends`, then open http://127.0.0.1:5175/preview/building for the complete interactive building, http://127.0.0.1:5175/preview/start for your simulated office or http://127.0.0.1:5175/preview/visit to visit Maya directly. Friends → Elevator shows both floors. Maya has eight synthetic coworkers with changing status, chosen names/work areas and a warm lounge style. The preview banner links between both offices.
 
-</details>
+This is a disposable, loopback-only demo with automatically signed-in synthetic accounts and an accepted synthetic invitation. It uses a temporary database, disables private T3 endpoints and never publishes real activity. The separate `127.0.0.1` host keeps its cookies apart from the normal `localhost` office; do not use it as a public service. Ctrl+C stops the simulation and removes its temporary database on clean shutdown. Restarting creates a fresh demo. Optional verification: `node scripts/friend-preview.mjs --check-browser`.
 
-<details>
-<summary><b>Keyboard and mouse</b></summary>
+## Build together, celebrate, and take a tour
 
-<br>
+The original office remains home. Open **Friends & characters → More tools** and choose:
 
-| Key | Action |
-|---|---|
-| `p` / `k` | Pinboard / quota wall |
-| `b` | Cost view |
-| `m` / `n` / `l` | Play or pause, next track, like |
-| `s` | Sound effects on or off |
-| `,` or `o` | Settings |
-| `w` | Next weather mode |
-| `c` | Director camera on or off |
-| `0` | Reset the camera |
-| `[` `]` `\` | Time travel back, forward, reset |
-| `Esc` | Close the current view |
+- **Build together**: start a 25- or 50-minute focus session, or explicitly join an invited friend's session. Joining shares your chosen display name and quiet preference with the host and joined participants. Close the panel to work in your office; its small timer stays visible and can reopen the session. Quiet mode suppresses the gentle halfway check-in. Leave or end the session when finished.
+- **We shipped**: enter a short milestone, preview the audience/text, then explicitly publish to activity guests. Nothing is read from your agents or published automatically. Activity-granted friends also see the latest moment and a celebration lantern on your building floor. Owners can delete a moment or preview/download a safe PNG card; the export contains only the chosen title, kind, display name and date. A moment is owner-reported, not independent proof of completion. No upload occurs.
+- **Take a tour**: replay the first-user guide: welcome, optional coworker customization, invitation, admitted visit, walking/chat and privacy controls. It follows your choices and does not create invitations, admit people or publish work. Continue later, Skip, keyboard controls and reduced motion are supported.
 
-Drag to pan, right-drag or shift-drag to turn, scroll to zoom. Double-click the floor to reset the camera,
-double-click a person to open their thread in T3 Code.
+Focus sessions and moments use your optional building account. The existing invitation grant controls who can discover/join your session; only activity guests see moments. Joining is always a separate choice. Revocation removes membership and access; regranting does not rejoin. Sessions expire on server time, and moments retain for seven days with at most 20 per office/feed. Stopping agent activity sharing does not end a session or delete a moment—use those explicit controls.
 
-</details>
+For the full two-office first tour, run `npm run demo:friends` and open [the guided simulation](http://127.0.0.1:5175/preview/tour). This loopback-only launcher uses disposable synthetic identities and preaccepted demo invitations. Maya is explicitly scripted: she admits demo visit requests and sends a generic reply. Normal app routes never automatically sign in, accept invitations or create consent. The tour is user-paced and has no forced timer.
 
-## How it works
+Verification: `npm test`, `npm run build`, `npm run test:e2e` (including the social browser checks), and `npm run test:tour`. `npm run test:social` runs just the synthetic multi-user social flow. No real private provider data is required.
 
-```mermaid
-flowchart LR
-  subgraph machine["Your machine"]
-    direction LR
-    t3[("T3 Code<br/>~/.t3")]
-    prov[("Provider transcripts<br/>~/.claude · ~/.codex")]
-    api["T3 Office server<br/>localhost, read-only"]
-    office["The office<br/>three.js in your browser"]
-    t3 -- "read-only SQLite" --> api
-    prov -- "read-only" --> api
-    api -- "/api/t3" --> office
-  end
-```
+## Personal floors and doorbell
 
-T3 Code's own API needs a paired session, so a small server reads its local state instead: the SQLite database
-(read-only, every query through an index) and the caches with the rate limits. It sends plain data and codes to the
-browser, which diffs them into events ("Kurt's tests went green", "Gemma waits for you") and lets the people in the
-office act them out. The same events come from a built-in simulation, which is what you see in demo mode.
+Open **Friends & characters → Office style** to choose your accent, emblem and three raised shelf furnishings (plants, books or lamps). Apply saves and reopens the office, following the existing style behavior. The decor appears in your full office and building preview; defaults keep the original room. With an account, explicitly saved decor is visible to activity guests; presence-only guests never receive it. Your floor name remains editable under Sharing.
 
-Everything you see is generated in code: the voxel people, the pixel textures, the sound effects, the lo-fi music. The
-whole thing is plain TypeScript and three.js, rendered at a low resolution with outlines for the pixel look. No UI
-framework, no image assets.
+Open **Friends & characters → Doorbell** to let invited friends request to join your focus session. It starts off. Once enabled, new participants need **Let them join** approval; **Not now** declines. Guests can choose quiet mode before ringing and cancel their request. Rings expire after two minutes, and a one-minute cooldown prevents repeated ringing even after cancellation.
 
-**Platforms.** Developed on macOS. Linux and Windows should work as well; only "double-click to open the thread in
-T3 Code" is macOS-only for now. Reports from other systems are very welcome.
+**Do Not Disturb** blocks new rings and focus participants, and declines pending requests. Existing participants remain. With both DND and ringing off, the original Join session action works. Approval never upgrades a guest's office access. No audio, messages, prompts or task information are sent. Dismissing an accepted request receipt does not leave the focus session; use its Leave session action.
 
-## Contributing
+`npm run test:doorbell` runs the synthetic two-user browser checks. It is also included in `npm run test:e2e`.
 
-The office has room for more people. New furniture, a smarter dog, a third language, support for Linux quirks,
-tests, performance: contributions of every size are welcome.
+In the disposable demo, [Simulate a doorbell](http://127.0.0.1:5175/preview/doorbell) enables simulated Maya's doorbell; she automatically accepts valid demo rings. This behavior is confined to the demo launcher. If you already joined her focus session through Build together, leave it before trying a new ring.
 
-```sh
-git clone https://github.com/felixgollnhuber/t3-office.git && cd t3-office
-npm install
-npm run dev     # http://localhost:5173/?source=demo, no T3 Code needed
-```
+## Human avatars, office conversations and walking
 
-The [contributing guide](CONTRIBUTING.md) has a tour of the code, the house rules (read-only, local, every text in
-every language) and good places to start. Please read the [Code of Conduct](CODE_OF_CONDUCT.md), and report security
-problems [privately](SECURITY.md).
+Open **People & chat** in the office, or from Friends & characters. **My avatar** sets your chosen human name, clothing color, hairstyle and availability. People have colored floor rings and explicit PERSON/YOU labels, separate from AI coworkers. Profile editing alone does not announce your presence.
 
-**Translating:** texts live in `src/i18n/`, one table per area with one block per language. `en` is the reference;
-TypeScript reports any text a language block is missing. To add a language, add it to `LANGS` in
-`src/i18n/index.ts` and add a block to each table.
+Under **Visits**, an owner can open their office for conversations or enable Do Not Disturb. An invited friend requests an office visit; the owner explicitly admits or declines them. The guest then chooses to enter. Activity sharing, presence-only invitations and focus-session doorbells do not automatically grant human chat access. The focus doorbell offers a separate **Office visits & chat** entry point.
 
-## License
+After entering, exchange plain-text messages in Conversation. Sending/Sent/Not sent states and a manual Retry action handle failures; retries do not duplicate accepted messages. Unread messages appear on the launcher while the panel is closed. Authors can delete their messages, and hosts can delete messages or remove visitors. Chat is stored as plaintext on this building server, not end-to-end encrypted. It never reads your agents, prompts, transcripts, files or usage automatically. Do not paste secrets.
 
-[MIT](LICENSE) © Felix Gollnhuber
+**Walk** enables tap/click-to-walk on open floor, or arrow-key movement. Turn it off to restore normal camera panning. Human avatars use the original office navigation for local paths; remote movement is interpolated from bounded server updates. Walking is limited to the main office, not a walkable city or exterior. The current local implementation uses polling rather than WebSockets. Presence-only guests keep their generic room appearance; human admission does not reveal activity-only room/character customization.
 
-Fonts are loaded from the `@fontsource` packages under the SIL Open Font License. The files in `public/sets/` are
-measurements derived from publicly available recordings and contain no audio. [T3 Code](https://github.com/pingdotgg/t3code)
-is a separate project; this office is a fan project and not affiliated with it.
+Leaving removes your live avatar and chat read access. A missed heartbeat expires presence after 20 seconds. Revoking the underlying invitation grant, closing conversations or removing a guest denies subsequent reads and clears the UI; a fresh office grant does not restore conversation admission. Do Not Disturb blocks new visits and absent guests from re-entering while currently present people can remain. Admissions last while the room stays open and the grant remains valid; hosts can remove them. Requests expire in two minutes and have a one-minute cooldown.
+
+Messages are limited to 500 characters, one per second and twenty per minute. Rooms retain at most 200 messages, display the most recent 100 available to you, and hide/prune messages older than seven days on room requests. Newly admitted guests see only messages sent after admission, using a sequence boundary even for identical timestamps. Downloaded or previously seen text cannot be recalled. Nothing is publicly hosted by enabling these local features.
+
+`npm run test:humans` runs the synthetic two-user original-office avatar/chat/walking test; it is included in `npm run test:e2e`. Run `npm run demo:friends`, then open [Meet simulated Maya](http://127.0.0.1:5175/preview/people). Request entry, wait for the explicitly simulated host to admit you, enter the conversation, and send a greeting. Maya is a scripted simulation, not a real person or AI model; this automatic admission/reply behavior exists only in the disposable demo launcher.
+
+## A simpler way to meet friends
+
+Open **People & chat → Friends**. **Invite a friend** creates a presence-only invitation; copy its link. The recipient uses **Have an invite? → Add friend** in the same panel. Activity sharing remains a separate explicit choice under account/office settings.
+
+Choose **Open & join my office** to accept visit requests and appear in your office in one action. Friends ring from their office card; you admit them and they choose to walk in. This does not bypass admission. **Visit settings** contains closing/DND; **People in this room** contains removal. Your avatar is under **You**. The original menu keeps focus, milestones, tour and doorbell under **More tools**. The synthetic preview's five shortcuts are under **Demo shortcuts**.
+
+## Identity and cloud preparation
+
+The GitHub protocol, local HTTP/account integration and configured-provider interface are tested with a simulated provider. The normal service keeps GitHub disabled until explicit setup. The user has registered a local GitHub OAuth app; secure credential setup and real authorization remain pending. No cloud service has been provisioned. [Identity/cloud preparation](docs/identity-cloud.md) records the verified local flow, activation requirements and proposed Cloudflare boundary. Local accounts continue to work independently.
+
+For the complete first-user verification locally, run `npm run test:onboarding`. It covers real two-browser setup, a scripted one-person demo, recovery/account races, keyboard/phone layouts and all four themes. `npm run test:tour` runs the fresh-account journey alone; `npm run test:onboarding:demo` runs the disposable scripted visit. These use synthetic accounts and isolated databases. No remote browser CI run is claimed.
+
+`npm run test:github` runs the configured-provider browser flow with intercepted GitHub navigation and synthetic server responses; it never contacts the real provider.
+
+
+For the registered local GitHub trial, the server can explicitly load an owner-only `.local/github-oauth.json` containing only `clientId` and `clientSecret`, delivered through supported secure input. Do not paste secrets into chat, use `VITE_*` variables for them, or commit them. The file is ignored and blocked by the development server; symlinks, oversized/malformed configuration and permissive POSIX file access fail with a generic error. With credentials securely configured, run `OFFICE_GITHUB_LOGIN=1 npm run dev -- --host localhost --port 5173 --strictPort`. Use exactly `http://localhost:5173`; the callback is fixed to `http://localhost:5173/api/building/auth/github/callback`. The normal command remains default-disabled; public/cloud OAuth configuration needs a separate adapter. `npm run test:github:config` checks native configuration using synthetic credentials without provider traffic.
+
+
+The Cloudflare backend is available for local testing with `npm run test:cloud`: accounts, sessions, invitations, durable GitHub login, allowlisted activity, room appearance, character styles, publisher controls, admitted human rooms/chat, focus sessions, moments and the doorbell run against local Workers/D1. Cloud GitHub tests use a simulated provider.
+
+To try the original office on the local Worker, run `npm run cloud:office` and open http://localhost:8787. It builds the UI, applies local D1 migrations and serves the UI and `/api/building/*` from one origin. Private `/api/t3/*` and `/api/board` routes return 404, so the home screen uses the simulated office. Worker accounts are separate from the Node service's `.local/building.sqlite`; nothing is migrated. `npm run test:cloud:ui` runs a two-browser check of the production build against a disposable Worker database.
+
+A two-person hosted trial is prepared but not deployed. The [hosted trial runbook](docs/hosting.md) covers Cloudflare setup, the GitHub-only guest list, free-plan limits, backups, logs and the off-switch. See [local cloud commands and limits](docs/identity-cloud.md#off-025-first-workerd1-permission-slice). Nothing is deployed.

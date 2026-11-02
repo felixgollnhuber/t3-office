@@ -1,0 +1,68 @@
+/* Social rituals stay in the original office's paper-and-pixel visual language. */
+.social-office { box-sizing: border-box; width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 24px; border: 3px solid var(--edge, #334a3e); box-shadow: 8px 8px 0 var(--shadow, #1f2e27); background: var(--paper, #f6f2df); color: var(--ink, #273b33); font: 16px/1.5 'Bitcount Prop Single', 'Pixelify Sans', monospace; overflow: auto; overscroll-behavior: contain; }
+.social-office *, .social-office *::before, .social-office *::after { box-sizing: border-box; }
+.social-office::backdrop { background: #101a18b0; }
+.social-office header { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+.social-office header h1 { font: bold 30px/1.15 'Pixelify Sans', monospace; margin: 4px 0 9px; }
+.social-office header p, .social-office header small { color: var(--muted, #566759); }
+.social-office header > button { font-size: 25px; min-width: 42px; padding: 0 10px; }
+.social-office h2 { font-size: 21px; margin: 0 0 8px; }
+.social-office h3 { font-size: 19px; margin: 8px 0; overflow-wrap: anywhere; }
+.social-office p { margin: 6px 0 14px; }
+.social-office small { font-size: 12px; }
+.social-office button, .social-office input, .social-office select { color: inherit; font: inherit; }
+.social-office button { cursor: pointer; border: 2px solid var(--edge, #334a3e); background: var(--paper, #f6f2df); color: var(--ink, #273b33); padding: 9px 13px; box-shadow: 2px 2px 0 var(--shadow, #bdc4b4); min-height: 40px; }
+.social-office button:hover, .social-office button[aria-pressed=true] { color: var(--paper, #f6f2df); background: var(--ink, #273b33); }
+.social-office button:disabled { opacity: .5; cursor: wait; }
+.social-office button:focus-visible, .social-office input:focus-visible, .social-office select:focus-visible { outline: 3px solid var(--accent, #b76f3f); outline-offset: 3px; }
+.social-office nav { display: flex; flex-wrap: wrap; gap: 10px; margin: 22px 0 12px; }
+.social-office .social-notice { min-height: 24px; margin: 10px 0 18px; color: var(--muted, #566759); font-size: 13px; }
+.social-office .social-notice[data-error=true] { border-left: 4px solid var(--accent, #b76f3f); padding-left: 12px; color: var(--ink, #273b33); }
+.social-office section { margin: 18px 0 26px; }
+.social-office form { display: grid; gap: 13px; margin: 18px 0; }
+.social-office label { display: grid; gap: 6px; }
+.social-office input:not([type=checkbox]), .social-office select { width: 100%; min-width: 0; padding: 9px; border: 2px solid var(--edge, #334a3e); background: var(--paper, #f6f2df); }
+.social-office .social-check { display: flex; gap: 10px; align-items: center; font-size: 14px; }
+.social-office input[type=checkbox] { accent-color: var(--ink, #273b33); width: 20px; height: 20px; flex: none; }
+.social-office form > button { justify-self: start; }
+.social-office .social-consent, .social-office .social-hint { color: var(--muted, #566759); font-size: 13px; line-height: 1.65; }
+.social-office .social-consent { padding: 12px; border-left: 3px solid var(--edge, #334a3e); background: color-mix(in srgb, var(--ink, #273b33) 5%, var(--paper, #f6f2df)); }
+.social-office .social-session, .social-office .social-moment { border: 2px solid var(--edge, #334a3e); padding: 17px; margin: 14px 0; }
+.social-office .social-card-heading { display: flex; justify-content: space-between; gap: 14px; align-items: start; }
+.social-office .social-countdown { text-align: right; flex: none; }
+.social-office .social-countdown b { font: 30px/1.2 'VT323', monospace; font-variant-numeric: tabular-nums; display: block; }
+.social-office .social-countdown small { display: block; }
+.social-office .social-badge { display: inline-block; padding: 2px 7px; border: 1px solid var(--edge, #334a3e); font-size: 12px; line-height: 1.6; }
+.social-office time { font-size: 12px; color: var(--muted, #566759); }
+.social-office .social-session ul { display: grid; gap: 8px; padding: 0; margin: 16px 0; list-style: none; }
+.social-office .social-session li { display: flex; justify-content: space-between; gap: 12px; overflow-wrap: anywhere; }
+.social-office .social-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
+.social-office .social-actions .social-check { flex: 1; }
+.social-office .social-empty { padding: 28px 0; }
+.social-office .social-empty > span { display: block; font-size: 70px; line-height: 1.1; }
+.social-office .social-empty-note { padding: 20px; border: 2px dashed var(--edge, #334a3e); color: var(--muted, #566759); }
+.social-office .social-publication-preview, .social-office .social-export > section { padding: 18px; border: 3px solid var(--edge, #334a3e); background: var(--paper, #f6f2df); }
+.social-office .social-card-preview canvas { width: 100%; height: auto; display: block; margin: 15px 0; border: 1px solid var(--edge, #334a3e); }
+.social-office.social-celebrate { animation: social-celebrate 1.8s ease-out; }
+@keyframes social-celebrate { 0%, 100% { outline: 0 solid transparent; } 20% { outline: 10px solid var(--accent, #bfa85d); box-shadow: 0 0 80px 20px #dec88680; } }
+@media (prefers-reduced-motion: reduce) { .social-office.social-celebrate { animation: none; outline: 4px solid var(--accent, #bfa85d); } }
+@media (max-width: 520px) { .social-office { padding: 18px; width: calc(100vw - 20px); max-height: calc(100dvh - 20px); } .social-office header h1 { font-size: 26px; } .social-office .social-card-heading { flex-wrap: wrap; } .social-office .social-countdown { text-align: left; } .social-office .social-actions > button { flex: 1 1 140px; } .social-office nav button { flex: 1; } .social-office input, .social-office select { font-size: 16px; } }
+.social-focus-badge { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9700; max-width: calc(100vw - 32px); padding: 9px 14px; border: 2px solid var(--edge, #334a3e); box-shadow: 3px 3px 0 var(--shadow, #1f2e27); color: var(--ink, #273b33); background: var(--paper, #f6f2df); font: 15px/1.35 'Bitcount Prop Single', monospace; cursor: pointer; font-variant-numeric: tabular-nums; }
+.social-focus-badge[hidden] { display: none; }
+.social-focus-badge:focus-visible { outline: 3px solid var(--accent, #b76f3f); outline-offset: 3px; }
+@media (max-width: 600px) { .social-focus-badge { top: 64px; font-size: 12px; padding: 7px 10px; white-space: nowrap; } }
+
+.social-checkin { position:fixed;right:16px;bottom:24px;z-index:9701;width:min(320px,calc(100vw - 32px));box-sizing:border-box;padding:16px;border:2px solid var(--edge,#334a3e);background:var(--paper,#f6f2df);color:var(--ink,#273b33);font:16px/1.45 'Pixelify Sans',monospace;box-shadow:3px 3px var(--shadow,#1f2e27); }
+.social-checkin[hidden] { display:none; }
+.social-checkin button { font:inherit;color:inherit;background:transparent;border:2px solid currentColor;padding:7px 10px;cursor:pointer; }
+.social-checkin p { margin:0 0 12px; }
+body:has(.social-office[open]) .social-checkin { visibility:hidden; }
+.shared-office .social-focus-badge { top:70px; }
+@media(max-width:700px){ .shared-office .social-focus-badge { top:110px; } }
+
+/* Opaque themed paper keeps text readable over moving lamps and characters. */
+.social-office, .social-focus-badge, .social-checkin { background:oklch(from var(--paper,#f6f2df) l c h / 1); }
+.social-office { margin:auto; font-family:'Pixelify Sans',monospace; font-size:18px; }
+.social-office .social-consent, .social-office .social-hint, .social-office small, .social-office time, .social-office .social-notice { font-size:14px; }
+
+.social-office [hidden] { display:none!important; }

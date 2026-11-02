@@ -1,3 +1,4 @@
+import type { CharacterEditor } from './character-editor';
 import type { T3Thread } from './t3source';
 import * as THREE from 'three';
 import { PROVIDERS, TEAMS, type Status } from './data';
@@ -7,6 +8,7 @@ import type { World, Worker } from './workers';
 import { date, num, usd } from './i18n';
 import { S } from './i18n/agent';
 import './thread.css';
+import { B } from './i18n/building';
 
 /** 3x5 pixel glyphs, rows top to bottom, 3 bits each */
 const GLYPHS: Record<string, number[]> = {
@@ -90,13 +92,16 @@ export class AgentInspector {
   private reveal = 0;
   private lastTop = '';
   /** which side of the sheet is open; stays when you go from agent to agent */
-  private tab: 'info' | 'thread' = 'info';
+  private tab: 'info' | 'thread' | 'customize' = 'info';
+  selectCharacter(id: string) { this.tab = this.editor && this.world.workers.has(id) ? 'customize' : 'info'; }
+  get customizing() { return !!this.editor && this.tab === 'customize'; }
   private shown = '';
   private bound = new WeakSet<HTMLElement>();
   private painted = new WeakMap<Element, string>();
   private convos = new Map<string, Convo>();
 
-  constructor(private source: AgentSource, private world: World, private now: () => Date) {
+  constructor(private source: AgentSource, private world: World, private now: () => Date, private editor?: CharacterEditor) {
+    if (editor) this.tab = 'customize';
     this.canvas.width = 64;
     this.canvas.height = 36;
     this.g = this.canvas.getContext('2d')!;
@@ -161,8 +166,8 @@ export class AgentInspector {
     el.addEventListener('click', (ev) => {
       if (!el.classList.contains('agent-view')) return;
       const a = (ev.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
-      if (a === 'tab-info' || a === 'tab-thread') {
-        this.tab = a === 'tab-thread' ? 'thread' : 'info';
+      if (a === 'tab-info' || a === 'tab-thread' || a === 'tab-customize') {
+        this.tab = a === 'tab-customize' && this.editor ? 'customize' : a === 'tab-thread' ? 'thread' : 'info';
         this.render(el, this.shown);
       } else if (a === 'newest') {
         const box = el.querySelector<HTMLElement>('.thread-scroll');
@@ -203,7 +208,7 @@ export class AgentInspector {
     const since = (performance.now() - (this.since.get(id) ?? performance.now())) / 1000;
     el.style.setProperty('--acc', ACCENT[t.provider]);
     const live = t as Partial<T3Thread>;
-    const tab = this.source.transcript ? this.tab : 'info';
+    const tab = this.customizing ? 'customize' : this.source.transcript && this.tab === 'thread' ? 'thread' : 'info';
 
     // the frame is built once per agent and tab; after that only the parts that changed are rewritten
     const sheet = `${tab}:${id}`;
@@ -212,17 +217,13 @@ export class AgentInspector {
       el.classList.toggle('reading', tab === 'thread');
       el.innerHTML = `
         <div class="part" data-part="top"></div>
-        ${
-          this.source.transcript
-            ? `<nav class="sheet-tabs"><button data-a="tab-info" class="${tab === 'info' ? 'on' : ''}">${S.tabOverview}</button><button data-a="tab-thread" class="${tab === 'thread' ? 'on' : ''}">${S.tabThread}</button></nav>`
-            : ''
-        }
+        <nav class="sheet-tabs">${this.editor ? `<button data-a="tab-customize" class="${tab === 'customize' ? 'on' : ''}">${B.customize}</button>` : ''}<button data-a="tab-info" class="${tab === 'info' ? 'on' : ''}">${S.tabOverview}</button>${this.source.transcript ? `<button data-a="tab-thread" class="${tab === 'thread' ? 'on' : ''}">${S.tabThread}</button>` : ''}</nav>
         ${
           tab === 'thread'
             ? `<section class="thread"><div class="thread-scroll"><ol data-part="thread"></ol></div><button class="thread-jump" data-a="newest">${S.newest}</button></section>`
-            : `<div class="part" data-part="body"></div><div class="part" data-part="links"></div>`
+            : tab === 'customize' ? `<section class="character-customization"></section>` : `<div class="part" data-part="body"></div><div class="part" data-part="links"></div>`
         }
-        <footer><button data-a="open" class="primary">${S.openInT3}</button></footer>`;
+        ${tab !== 'customize' ? `<footer><button data-a="open" class="primary">${S.openInT3}</button></footer>` : ''}`;
       const box = el.querySelector<HTMLElement>('.thread-scroll');
       box?.addEventListener('scroll', () => this.jumpHint(el), { passive: true });
     }
@@ -238,6 +239,7 @@ export class AgentInspector {
       </header>
       <div class="st s-${t.status}"><i></i>${STATUS_LABEL[t.status]}<em>${S.since(dur(since))}</em></div>`,
     );
+    if (tab === 'customize') { this.editor?.render(el.querySelector('.character-customization')!, id); return; }
     if (tab === 'thread') {
       this.read(el, id);
       this.fill(el, id);
@@ -246,7 +248,7 @@ export class AgentInspector {
     this.part(
       el,
       'body',
-      `<section><h5>${S.task}</h5><p class="task">${esc(t.title)}</p>${team ? `<p class="team" style="--team:${team.color}">${esc(live.project ?? team.name)}</p>` : ''}</section>
+      `<section><h5>${S.task}</h5><p class="task">${esc(t.title)}</p>${team ? `<p class="team" style="--team:${team.color}">${esc(live.project ?? team.name)}</p>` : ''}${t.workArea ? `<p class="team">${B.workArea}: ${esc(t.workArea)}</p>` : ''}</section>
       <section><h5>${S.rightNow}</h5><p>${esc(live.activity || (w ? this.activity(w) : ''))}</p>${live.message ? `<p class="bubble-q">${S.quote(esc(live.message))}</p>` : w?.bubble && w.bubble.until > this.world.time ? `<p class="bubble-q">${S.quote(esc(w.bubble.text))}</p>` : ''}</section>
       <div class="stats">
         <div><b>${t.toolCalls}</b><small>${S.toolCalls}</small></div>

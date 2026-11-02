@@ -1,3 +1,9 @@
+import { installHumanOffice } from './humans';
+import { addFloorIdentity } from './floor-identity';
+import { B } from './i18n/building';
+import { CharacterEditor } from './character-editor';
+import { DEFAULT_APPEARANCE, isAppearance } from './appearance';
+import { styleRoom } from './roomstyle';
 import * as THREE from 'three';
 import '@fontsource/pixelify-sans/700.css';
 import '@fontsource/silkscreen/400.css';
@@ -31,12 +37,16 @@ import { resolveSeason, type SeasonKind } from './seasons';
 import { Director, stage, type CameraRig, type XZ } from './director';
 import { clickables, hintOf, pickClickable, type Clickable } from './interact';
 import { showDemoBar } from './demobar';
+import { SharedSource } from './sharedsource';
+import { installOfficeMenu } from './officemenu';
+import { installHudFit } from './hud-fit';
 
 async function main() {
   const params = new URLSearchParams(location.search);
   const ZOOM = Number(params.get('zoom') ?? 11);
   // settings come from the store; URL parameters (?theme=, ?lat=, ?px= …) win there for this page view
-  const theme = THEMES.find((t) => t.id === settings.get('theme')) ?? THEMES[0];
+  let appearance = { ...DEFAULT_APPEARANCE, theme: settings.get('theme') };
+  try { const stored = JSON.parse(localStorage.getItem('office.appearance.v1') ?? 'null'); if (isAppearance(stored)) appearance = { ...stored, theme: settings.get('theme') }; } catch { /* defaults */ }
   // art pixel size in device pixels: 3 on retina (a bit finer than before), 2 on 1x screens
   const pixelFor = (dpr: number) => (settings.get('pixel') ? Math.max(1, Math.round(settings.get('pixel') * dpr)) : Math.max(2, Math.round(1.5 * dpr)));
 
@@ -48,20 +58,33 @@ async function main() {
     document.fonts.load('16px "VT323"'),
   ]);
 
-  applyHudTheme(theme);
-
   const clock = new Clock(params);
   const want = params.get('source');
+  const shared = want === 'shared';
+  if (shared) document.body.classList.add('shared-office');
   let t3: T3Source | null = null;
-  if (want === 't3' || (want !== 'demo' && (await detectT3()))) {
+  if (!shared && (want === 't3' || (want !== 'demo' && (await detectT3())))) {
     try {
       t3 = await T3Source.connect({ hours: Number(params.get('hours') ?? 12) });
     } catch (e) {
       console.warn('T3 not readable, using demo data', e);
     }
   }
-  const source: AgentSource = t3 ?? new DemoSource(Number(params.get('sim') ?? 1), Number(params.get('agents') ?? 15));
+  const source: AgentSource = shared
+    ? await SharedSource.connect(params.get('floor') ?? '')
+    : t3 ?? new DemoSource(Number(params.get('sim') ?? 1), Number(params.get('agents') ?? 15));
+  if (source instanceof SharedSource && source.appearance) appearance = source.appearance;
+  const theme = styleRoom(THEMES.find((t) => t.id === appearance.theme) ?? THEMES[0], appearance);
+  document.body.dataset.officeTheme = appearance.theme;
+  document.body.dataset.officeLayout = appearance.layout;
+  document.body.dataset.officeLighting = appearance.lighting;
+  applyHudTheme(theme);
+  if (shared) TEAMS.forEach((team) => { team.name = ''; });
   const syncTeams = () => {
+    if (source instanceof SharedSource) {
+      TEAMS.forEach((team, i) => { team.name = source.teams()[i] ?? ''; });
+      return;
+    }
     if (!t3) return;
     const named = new Map(t3.teams().map((t) => [t.index, t.short]));
     TEAMS.forEach((team, i) => (team.name = named.get(i) ?? ''));
@@ -70,11 +93,13 @@ async function main() {
   let teamSyncT = 0;
   const sfx = new Sfx();
   const weather = new Weather(settings.get('weather'), settings.get('lat'), settings.get('lon'));
-  const usage: UsageSource = t3 ? await T3Usage.connect() : new DemoUsage();
+  const usage: UsageSource = shared ? { groups: () => [], update: () => {} } : t3 ? await T3Usage.connect() : new DemoUsage();
 
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const pipe = new PixelPipeline(canvas, pixelFor(window.devicePixelRatio || 1), theme.post);
   const office = buildOffice(theme);
+  addFloorIdentity(office.scene, appearance.identity);
+  document.body.dataset.floorIdentity = JSON.stringify(appearance.identity ?? null);
   const cycle = new DayCycle(office.scene, office.sun, office.hemi, office.viewTex, pipe, settings.get('lat'), settings.get('lon'));
   const rain = office.viewTex ? new Rain(office.scene) : null;
   for (const m of office.lamps.mats) cycle.addLamp(m, 2.2, 0.4);
@@ -83,10 +108,17 @@ async function main() {
   let hud: Hud | undefined;
   const player = new Player(sfx, () => hud!.ytHost());
   const world = new World(office, theme, source, cycle, sfx, player, weather);
-  hud = new Hud(theme, sfx, clock, source, player, weather, () => menu.open());
+  hud = new Hud(theme, sfx, clock, source, player, weather, () => { window.dispatchEvent(new Event('office-building-close')); menu.open(); });
+  installHudFit(document.getElementById('hud')!);
+  installOfficeMenu(source, shared, (id) => focusAgent(id), {
+    canvas, theme,
+    render: (scene, camera) => pipe.render(scene, camera),
+    sync: (scene, sun, hemi) => { scene.background = office.scene.background; scene.fog = office.scene.fog; sun.color.copy(office.sun.color); sun.intensity = office.sun.intensity; sun.position.copy(office.sun.position); hemi.color.copy(office.hemi.color); hemi.groundColor.copy(office.hemi.groundColor); hemi.intensity = office.hemi.intensity; if (scene.background instanceof THREE.Color) document.documentElement.style.setProperty('--office-scene-bg', `#${scene.background.getHexString()}`); },
+  });
   const wall = new QuotaWall(office, usage, () => focusOn(spots[0]));
   if (t3) wall.live = 'live · T3';
   const board = new BoardSource(t3 ? 'live' : 'demo');
+  if (shared) board.data = { configured: false, fetchedAt: '', projects: [] };
   const pinView = new PinboardView(board);
   const paintBoard = () => {
     paintPinboard(office.pinboard.g, pinView.current);
@@ -121,7 +153,7 @@ async function main() {
       sfx.play('key');
     },
   });
-  const costs = new CostView(t3 ? 'live' : 'demo', (id, url, title) => {
+  const costs = shared ? null : new CostView(t3 ? 'live' : 'demo', (id, url, title) => {
     if (t3?.openThread(id)) hud!.toast(TXT.opening(title));
     else if (url) {
       window.open(url, '_blank', 'noopener');
@@ -131,13 +163,13 @@ async function main() {
   document.querySelector('#hud .receipt')!.addEventListener('click', () => {
     sfx.unlock();
     sfx.play('coin');
-    costs.open();
+    costs?.open();
   });
   const open = (id: string) => {
     if (id === 'boss') return hud!.toast(TXT.bossBusy);
     if (world.workers.has(id) || isBoss(id)) focusAgent(id);
   };
-  const inspector = new AgentInspector(source, world, () => clock.now());
+  const inspector = new AgentInspector(source, world, () => clock.now(), shared ? undefined : new CharacterEditor(source, world, () => { closeFocus(); homeView(); hud!.toast(B.characterSaved); window.dispatchEvent(new CustomEvent('office-onboarding-progress',{detail:{type:'character-saved'}})); }));
   const tagMode = () => (settings.get('tags') === 'auto' ? (theme.tagMode ?? 'full') : (settings.get('tags') as 'full' | 'quiet'));
   const tags = new Tags(tagMode(), (id) => {
     noteClick({ kind: 'agent', id, name: '' });
@@ -146,6 +178,7 @@ async function main() {
 
   // camera: iso view; drag pans like a map, right-drag or shift-drag turns it a little
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  const humans = installHumanOffice({scene:office.scene,camera,canvas,nav:office.nav,floorId:shared?params.get('floor'):null});
   const baseTarget = new THREE.Vector3(3.8, 1.5, 0.6);
   const target = baseTarget.clone();
   const view = { az: 45, el: 34, px: 0, py: 0 };
@@ -229,7 +262,8 @@ async function main() {
       // someone walking keeps the furniture around them; only a seated close-up cuts through the room
       let clip = 12;
       shot.set(p.x, 0.95, p.z);
-      if (w && w.mode === 'seated' && w.desk) {
+      if (w && inspector.customizing) { az = THREE.MathUtils.radToDeg(w.ch.root.rotation.y); el = 22; half = 1.7; clip = 5; }
+      else if (w && w.mode === 'seated' && w.desk) {
         // over the shoulder, so the monitor is readable
         const { p: sp, n } = w.desk.screenPose();
         az = THREE.MathUtils.radToDeg(Math.atan2(n.x, n.z)) + 42;
@@ -288,7 +322,8 @@ async function main() {
     },
   };
   const focusAgent = (id: string) => {
-    if (fly.spot === agentSpot) {
+    inspector.selectCharacter(id);
+    if (fly.spot === agentSpot && fly.dir >= 0) {
       previewDesk?.preview(null);
       previewDesk = null;
       agentId = id;
@@ -311,6 +346,7 @@ async function main() {
     return { az, el: FLY_EL, target: sp.center, half };
   };
   const focusOn = (sp: Spot) => {
+    if (shared && (sp.id === 'quota' || sp.id === 'board')) return;
     if (fly.spot === sp && fly.dir >= 0) return;
     if (fly.spot && fly.spot !== sp) closeFocus(true);
     fly.spot = sp;
@@ -388,7 +424,7 @@ async function main() {
   window.addEventListener(
     'wheel',
     (ev) => {
-      if (fly.spot || (ev.target as HTMLElement).closest('.panel, .focus-view')) return;
+      if (ev.target !== canvas || fly.spot || document.body.classList.contains('building-view-open')) return;
       // the director may have zoomed in further than the wheel goes: start from there instead of jumping back
       zoomTarget = THREE.MathUtils.clamp(zoomTarget * (1 + Math.sign(ev.deltaY) * 0.04), Math.min(0.82, zoomTarget), 1.12);
     },
@@ -409,6 +445,7 @@ async function main() {
   const repeatOf = (ev: MouseEvent) => (lastClick && performance.now() - lastClick.t < 500 && Math.hypot(ev.clientX - lastClick.x, ev.clientY - lastClick.y) < 12 ? lastClick.p : null);
   window.addEventListener('contextmenu', (ev) => ev.preventDefault());
   window.addEventListener('pointerdown', (ev) => {
+    if (ev.target !== canvas || document.body.classList.contains('building-view-open')) return;
     sfx.unlock();
     const el = ev.target as HTMLElement;
     const again = repeatOf(ev);
@@ -440,6 +477,10 @@ async function main() {
     Object.assign(goal, { ...HOME, px: 0, py: 0 });
     zoomTarget = 1;
   };
+  window.addEventListener('office-building-open', () => closeFocus(true));
+  window.addEventListener('office-departure', () => { closeFocus(true); zoomTarget = 1.6; });
+  window.addEventListener('office-travel-cancel', homeView);
+  window.addEventListener('office-arrival-start', () => { zoomF = 1.45; zoomTarget = 1; });
   /** the height the camera aims at: about the chest of a person */
   const LOOK_Y = 1;
   const basis = (azDeg: number, elDeg: number) => {
@@ -471,7 +512,7 @@ async function main() {
       }
     },
     half: () => ZOOM,
-    busy: () => !!fly.spot || !!drag || menu.isOpen || costs.isOpen,
+    busy: () => !!fly.spot || !!drag || menu.isOpen || !!costs?.isOpen,
   };
   const afoot = (id: string) => () => {
     const w = world.workers.get(id);
@@ -538,6 +579,7 @@ async function main() {
     hintEl.style.transform = `translate(${Math.max(4, Math.min(x + 14, window.innerWidth - hintEl.offsetWidth - 8))}px, ${Math.min(y + 12, window.innerHeight - hintEl.offsetHeight - 8)}px)`;
   };
   window.addEventListener('pointermove', (ev) => {
+    if (ev.target !== canvas || document.body.classList.contains('building-view-open')) { setHover(null); return; }
     if (!drag && !fly.spot && ev.timeStamp - hoverT > 30) {
       hoverT = ev.timeStamp;
       const el = ev.target as HTMLElement;
@@ -567,7 +609,8 @@ async function main() {
     goal.px = THREE.MathUtils.clamp(goal.px, -lim.x, lim.x);
     goal.py = THREE.MathUtils.clamp(goal.py, -lim.y, lim.y);
     goal.az = THREE.MathUtils.clamp(goal.az, 45 - AZ, 45 + AZ);
-    if (!click) return;
+    // A gesture released over UI (or cancelled by the browser) must never pick the scene.
+    if (!click || ev.type === 'pointercancel' || ev.target !== canvas || document.body.classList.contains('building-view-open')) return;
     const again = repeatOf(ev);
     const hit = pickAt(ev.clientX, ev.clientY, true);
     noteClick(hit);
@@ -578,16 +621,19 @@ async function main() {
     else if (again?.kind === 'thing' && again.c === hit.c && hit.c.onDouble) hit.c.onDouble();
     else hit.c.onClick();
   };
-  window.addEventListener('pointerup', endDrag);
-  window.addEventListener('pointercancel', endDrag);
+  // Capture guarantees cleanup even when a panel stops the release from bubbling.
+  window.addEventListener('pointerup', endDrag, true);
+  window.addEventListener('pointercancel', endDrag, true);
   window.addEventListener('dblclick', (ev) => {
-    if (fly.spot || (ev.target as HTMLElement).closest('.panel, .quota-wall, .focus-view')) return;
+    if (ev.target !== canvas || fly.spot || document.body.classList.contains('building-view-open')) return;
     // a double-click on somebody or something is theirs; only the empty floor resets the camera
     if (lastClick?.p && performance.now() - lastClick.t < 700) return;
     homeView();
   });
   window.addEventListener('keydown', (ev) => {
+    if (ev.target instanceof Element && ev.target.closest('#hud, dialog, .focus-view, .human-panel, .office-tour, .office-welcome, button, input, select, textarea, [contenteditable=true]')) return;
     if (ev.key === 'Escape') return closeFocus();
+    if ((ev.target as HTMLElement).closest('input, select, textarea, [contenteditable=true]')) return;
     if (ev.key === 'p') return fly.spot ? closeFocus() : focusOn(spots[1]);
     if (ev.key === 'k') return fly.spot ? closeFocus() : focusOn(spots[0]);
     if (ev.key === '[') clock.shift(-30);
@@ -657,6 +703,12 @@ async function main() {
     const t = performance.now();
     const dt = Math.min(0.05, (t - last) / 1000);
     last = t;
+    if (document.body.classList.contains('building-view-open')) {
+      source.update(dt); const now = clock.now(); weather.update(dt, now.getHours());
+      Object.assign(cycle.weather, { cloud: weather.cloud, rain: weather.rain, snow: weather.snow, flash: weather.flash }); cycle.update(now);
+      if ((hudT += dt) > .25) { hud!.update(hudT, now, world, source, cycle); hudT = 0; }
+      requestAnimationFrame(loop); return;
+    }
     const now = clock.now();
 
     director.update(dt);
@@ -764,6 +816,7 @@ async function main() {
     const typing = threads.filter((x) => x.status === 'running').reduce((s, x) => s + 1 + x.tps / 60, 0);
     sfx.update(dt, typing * 1.4);
 
+    humans.update(dt);
     pipe.render(office.scene, camera);
     const w = window.innerWidth, hh = window.innerHeight;
     tags.update([...world.anchors(), ...world.pets.anchors()], camera, w, hh);
@@ -780,10 +833,19 @@ async function main() {
       document.body.classList.toggle('night', cycle.lampLevel > 0.55);
     }
 
-    if (++frames === 3) (window as unknown as { __ready: boolean }).__ready = true;
+    if (++frames === 3) { (window as unknown as { __ready: boolean }).__ready = true; window.dispatchEvent(new Event('office-ready')); }
     requestAnimationFrame(loop);
   };
   loop();
 }
 
-main();
+main().catch((error) => {
+  console.error('Office could not start', error);
+  const message = document.createElement('p');
+  message.textContent = 'Office unavailable. Return to the building and try again.';
+  Object.assign(message.style, { position: 'fixed', top: '40%', width: '100%', textAlign: 'center', color: '#eee' });
+  const home = document.createElement('a'); home.href = '/'; home.textContent = 'Return to your office';
+  message.append(document.createElement('br'), home);
+  document.body.replaceChildren(message);
+  window.dispatchEvent(new Event('office-load-error'));
+});

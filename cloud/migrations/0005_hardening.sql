@@ -1,0 +1,3 @@
+CREATE TABLE publish_rate(user TEXT PRIMARY KEY REFERENCES users(id),window INTEGER NOT NULL,count INTEGER NOT NULL);
+ALTER TABLE human_presence ADD COLUMN budget REAL NOT NULL DEFAULT 0.25;
+ALTER TABLE human_admissions ADD COLUMN request TEXT;

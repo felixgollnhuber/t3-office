@@ -194,6 +194,13 @@ export class PixelPipeline {
     (this.uniforms.resolution.value as THREE.Vector2).set(this.width, this.height);
   }
 
+  /** Dispose a standalone preview pipeline; shared office pipelines keep their context. */
+  dispose() {
+    this.colorRT.dispose(); this.normalRT.dispose(); this.normalMat.dispose();
+    this.quad.geometry.dispose(); (this.quad.material as THREE.Material).dispose();
+    this.renderer.dispose(); this.renderer.forceContextLoss();
+  }
+
   render(scene: THREE.Scene, camera: THREE.Camera) {
     const r = this.renderer;
     camera.layers.enable(FX_LAYER);

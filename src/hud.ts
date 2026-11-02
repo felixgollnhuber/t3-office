@@ -83,7 +83,7 @@ export class Hud {
         <div class="hint">${S.unlockHint}</div>
       </section>
 
-      <section class="panel receipt">
+      <section class="panel receipt" title="${esc(S.receiptHint)}">
         <div class="kicker">${S.receipt}</div>
         <dl></dl>
         <div class="teams"></div>

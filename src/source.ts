@@ -1,3 +1,4 @@
+import type { CharacterStyle } from './character-style';
 import type { ToolKind } from './desk';
 import type { Provider, Status } from './data';
 import { S } from './i18n/demo';
@@ -16,6 +17,9 @@ export interface Thread {
   context: number;
   cost: number;
   settled: boolean;
+  /** Owner-chosen display label; never inferred from private prompts or file paths. */
+  workArea?: string;
+  characterStyle?: CharacterStyle;
   parentId?: string;
   /** thread that launched or steers this one (not a subagent relation) */
   managerId?: string;

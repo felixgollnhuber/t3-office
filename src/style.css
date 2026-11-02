@@ -7,6 +7,8 @@ body { font-family: var(--font), system-ui, sans-serif; font-weight: 500; color:
 
 #scene { position: fixed; left: 0; top: 0; image-rendering: pixelated; display: block; }
 #tags, #hud, #wall { position: fixed; inset: 0; pointer-events: none; }
+/* Visible HUD surfaces own their input; gaps between panels still reach the office. */
+.panel { pointer-events: auto; }
 #hud button, .tag .plate { pointer-events: auto; cursor: pointer; }
 .tag.hidden { display: none; }
 
@@ -91,6 +93,8 @@ body { font-family: var(--font), system-ui, sans-serif; font-weight: 500; color:
 .sets li em { font-style: normal; opacity: 0.8; }
 .sets li.on { background: var(--accent); color: var(--edge); }
 .sets li.on em { opacity: 1; }
+/* boiler's edge and accent are the same pink, which hid the playing track's name */
+body[data-theme='boiler'] .sets li.on { color: oklch(0.16 0.03 15); }
 
 .receipt {
   left: 36px; bottom: 34px; width: 250px; padding: 14px 16px 22px;
@@ -280,6 +284,8 @@ body.grabbing, body.grabbing * { cursor: grabbing !important; }
 #focus { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #tags, .panel { transition: opacity 0.3s steps(3); }
 body.focused #tags, body.focused .panel { opacity: 0; pointer-events: none; }
+/* Children with explicit pointer-events must also stop catching invisible input. */
+body.focused #tags *, body.focused #hud .panel * { pointer-events: none; }
 body.hot { cursor: pointer; }
 .spot-hint {
   position: fixed; left: 0; top: 0; display: none; pointer-events: none;
@@ -767,4 +773,69 @@ body.phone .focus-view:not(.dock) {
   body.phone .focus-view.dock, body.phone .focus-view.dock.agent-view.reading {
     top: 8px; bottom: 8px; right: max(8px, env(safe-area-inset-right)); width: calc(50% - 8px);
   }
+}
+/* Shared offices expose status only; the local cost/quota/project surfaces are not shared data. */
+.shared-office #hud .receipt,
+.shared-office #hud .pulse,
+.shared-office #hud .ticker,
+.shared-office .agent-view .stats,
+.shared-office .agent-view footer,
+.shared-office .quota-wall,
+.shared-office .quota-view,
+.shared-office .pin-view { display: none !important; }
+
+/* An optional drawer; the office and its original HUD remain the default experience. */
+.office-friends-dialog { width: min(740px, calc(100% - 24px)); height: min(820px, calc(100dvh - 32px)); padding: 0; border: 3px solid var(--edge); background: var(--paper); color: var(--ink); box-shadow: 7px 7px 0 var(--shadow); }
+.office-friends-dialog::backdrop { background: #0008; }
+.office-friends-dialog iframe { display: block; width: 100%; height: 100%; border: 0; }
+/* Friends, people and building launchers share one row under the crew box, in the clock-panel button style. */
+.clock .hud-actions { position: relative; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; max-width: 420px; }
+.clock .hud-actions .wx { margin-top: 0; padding: 5px 8px; cursor: pointer; }
+.clock .hud-actions .wx:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
+/* Kiosk hides the HUD panels; keep only this row, at the top right. */
+body.kiosk #hud .clock .hud-actions { visibility: visible; position: fixed; top: calc(12px + env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); max-width: calc(100vw - 24px); justify-content: flex-end; }
+.shared-connection-cover { position: fixed; inset: 0; z-index: 1000; display: grid; place-content: center; gap: 18px; padding: 30px; text-align: center; background: var(--paper); color: var(--ink); }
+.shared-connection-cover a { color: inherit; }
+
+.office-home-launcher { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 40; background: var(--paper, #e9e5d2); color: var(--ink, #273c34); border: 2px solid currentColor; padding: 10px 16px; font: inherit; cursor: pointer; }
+
+body > .office-building-launcher { position: fixed; left: 16px; bottom: 16px; z-index: 45; color: var(--ink,#263d37); background: var(--paper,#f0ead9); border: 2px solid currentColor; padding: 10px 16px; font: 18px 'Pixelify Sans',monospace; cursor: pointer; }
+.office-building-launcher:focus-visible { outline: 3px solid var(--accent,#d9b56a); outline-offset: 3px; }
+@media(max-width:700px) { body > .office-building-launcher { top: 12px; bottom: auto; left: 12px; font-size: 14px; padding: 8px; } .office-home-launcher { top: 64px; left: 12px; transform: none; } }
+
+/* ---------- short and narrow desktop windows: the HUD columns compact instead of overlapping ----------
+   src/hud-fit.ts measures the real panels and sets the lowest body.hud-fit-N level at which none intersect.
+   Anything hidden stays reachable: the receipt opens the full cost view and the track list scrolls. */
+body.hud-fit-1 .clock, body.hud-fit-1 .deck { top: 18px; }
+body.hud-fit-1 .receipt, body.hud-fit-1 .pulse, body.hud-fit-1 .ticker { bottom: 18px; }
+body.hud-fit-1 .clock .time, body.hud-fit-1[data-theme='boiler'] .clock .time { font-size: 64px; }
+body.hud-fit-1 .crew { margin-top: 10px; gap: 3px; padding: 7px 10px; }
+body.hud-fit-1 .clock .hud-actions { margin-top: 10px; }
+body.hud-fit-1 .receipt { padding: 10px 14px 18px; }
+body.hud-fit-1 .receipt .teams { display: none; }
+body.hud-fit-1 .deck { padding: 10px 14px; }
+body.hud-fit-1 .deck .eq { display: none; }
+body.hud-fit-1 .deck .sets { max-height: 82px; overflow-y: auto; overscroll-behavior: contain; }
+body.hud-fit-1 .ticker ol { min-height: 0; }
+body.hud-fit-1 .ticker li:nth-child(n+4) { display: none; }
+
+body.hud-fit-2 .clock, body.hud-fit-2 .deck { top: 12px; }
+body.hud-fit-2 .receipt, body.hud-fit-2 .ticker { bottom: 12px; }
+body.hud-fit-2 .clock .time, body.hud-fit-2[data-theme='boiler'] .clock .time { font-size: 52px; }
+body.hud-fit-2 .clock .date { margin-top: 6px; }
+body.hud-fit-2 .sun, body.hud-fit-2 .receipt .total, body.hud-fit-2 .pulse, body.hud-fit-2 .deck .hint { display: none; }
+body.hud-fit-2 .deck .sets { max-height: 52px; }
+body.hud-fit-2 .ticker li:nth-child(n+3) { display: none; }
+
+body.hud-fit-3 .receipt, body.hud-fit-3 .ticker { display: none; }
+/* Last resort for very small windows: the music keeps playing; the deck returns once there is room. */
+body.hud-fit-4 .deck { display: none; }
+
+@media (max-width: 960px) { .pulse { display: none; } }
+@media (max-width: 820px) {
+  .deck, .ticker { right: 18px; }
+  .deck { width: 280px; }
+  .ticker { width: 300px; }
+  .clock, .receipt { left: 18px; }
+  .clock .hud-actions { max-width: 300px; }
 }

@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const HELP = `T3 Office: your T3 Code threads as a pixel-art office.
+const HELP = `T3 Office: an invitation-based building for your agent offices.
 
 usage: t3-office [options]
 
@@ -14,8 +14,8 @@ usage: t3-office [options]
   --build      rebuild the office before starting
   -h, --help   show this help
 
-Environment: T3_HOME, CLAUDE_CONFIG_DIR, CODEX_HOME override where T3 Code and the providers keep their data.
-The pinboard reads office.config.json from the directory you start in.`;
+The building starts without private T3 data access. See README.md for the optional separate local companion and bridge.
+BUILDING_DB overrides the local building database path.`;
 
 const args = process.argv.slice(2);
 if (args.includes('-h') || args.includes('--help')) {
@@ -25,8 +25,8 @@ if (args.includes('-h') || args.includes('--help')) {
 
 // node:sqlite, which reads T3 Code's database, is available without a flag from 22.13 on
 const [major, minor] = process.versions.node.split('.').map(Number);
-if (major < 22 || (major === 22 && minor < 13)) {
-  console.error(`T3 Office needs Node.js 22.13 or newer, this is ${process.version}. Get a current one at https://nodejs.org`);
+if (major < 22 || (major === 22 && minor < 18)) {
+  console.error(`T3 Office needs Node.js 22.18 or newer, this is ${process.version}. Get a current one at https://nodejs.org`);
   process.exit(1);
 }
 

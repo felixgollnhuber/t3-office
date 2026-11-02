@@ -12,3 +12,14 @@ office.config.json
 shots/
 # throwaway browser scripts used while developing
 scripts/dev/
+
+# Local collaboration identities, sessions, grants and snapshots
+.local/
+test-results/
+
+# Local Worker tooling and secret files
+.wrangler/
+.dev.vars
+.dev.vars.*
+cloud/.dev.vars
+cloud/.dev.vars.*

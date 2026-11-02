@@ -1,0 +1,10 @@
+/** Actual bundled Worker/D1 runtime; synthetic storage and optional fixed-endpoint provider transport. */
+import{mkdtemp,rm,readFile,readdir}from'node:fs/promises';import{tmpdir}from'node:os';import{join,resolve}from'node:path';import{build}from'esbuild';import{Miniflare,convertV4MiniflareOptions}from'miniflare';
+export async function cloudFixture(options={}){
+ const dir=options.dir??await mkdtemp(join(tmpdir(),'office-cloud-'));const output=await build({entryPoints:[resolve('cloud/worker.ts')],bundle:true,write:false,format:'esm',platform:'browser',external:['node:*'],target:'es2022'});
+ const mf=new Miniflare({...convertV4MiniflareOptions({modules:true,script:output.outputFiles[0].text,compatibilityDate:'2026-11-02',compatibilityFlags:['nodejs_compat'],d1Databases:{DB:'office-cloud-fixture'},bindings:{APP_ORIGIN:options.origin??'http://127.0.0.1:8787',...options.bindings},serviceBindings:options.provider?{GITHUB_TRANSPORT:options.provider}:undefined}),...(options.persist?{resourcePersistencePath:join(dir,'resources')}:{})});
+ const db=await mf.getD1Database('DB');if(options.migrate!==false)for(const file of (await readdir('cloud/migrations')).filter(n=>n.endsWith('.sql')).sort())await db.exec(await readFile('cloud/migrations/'+file,'utf8'));
+ const origin=options.origin??'http://127.0.0.1:8787',jar=()=>new Map();
+ const call=async(c,p,m='GET',data,extra={})=>{const r=await mf.dispatchFetch(origin+'/api/building'+p,{method:m,redirect:'manual',headers:{Cookie:[...c].map(([k,v])=>k+'='+v).join('; '),...(m==='GET'?{}:{'Content-Type':'application/json',Origin:origin}),...extra},body:data===undefined?undefined:JSON.stringify(data)});for(const item of r.headers.getSetCookie()){const [pair]=item.split(';'),i=pair.indexOf('=');if(/max-age=0(?:;|$)/i.test(item))c.delete(pair.slice(0,i));else c.set(pair.slice(0,i),pair.slice(i+1));}const raw=await r.text();return{status:r.status,data:raw?JSON.parse(raw):null,headers:r.headers,cookies:r.headers.getSetCookie()};};
+ return{mf,db,origin,dir,jar,call,close:async({keep=false}={})=>{await mf.dispose();if(!keep)await rm(dir,{recursive:true,force:true});}};
+}

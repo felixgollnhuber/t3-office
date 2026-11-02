@@ -5,13 +5,15 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { codexInitial, isCodexState, parseCodex, type CodexState, type UsageRecord as Rec } from './tokens.ts';
 
 /**
  * GET /api/t3/costs?range=24h|7d|30d|90d — the numbers of T3 Code's Usage page.
  *
  * T3 does not take these from its orchestration database: its UsageService scans the
  * providers' native transcripts (~/.claude/projects, ~/.codex/sessions, …) and keeps the
- * parsed records in ~/.t3/userdata/usage-scan-cache-v5.json. This reads that cache, follows
+ * parsed records in versioned usage-scan-cache files (v9 in T3 Code 0.1.3). This reads
+ * the newest supported cache without merging overlapping generations, follows
  * transcripts that grew since T3 last wrote it (from the stored resume offset), and prices
  * the records the way T3 does (LiteLLM table in usage-model-rates.json, fast/priority tiers,
  * cache savings, de-duplication). Everything is read-only.
@@ -26,7 +28,7 @@ type Row = Record<string, unknown>;
 
 const T3_HOME = process.env.T3_HOME ?? join(homedir(), '.t3');
 const USERDATA = join(T3_HOME, 'userdata');
-const SCAN_CACHE = join(USERDATA, 'usage-scan-cache-v5.json');
+const CACHE_VERSIONS = [9, 8, 7, 6, 5] as const;
 const RATES = join(USERDATA, 'usage-model-rates.json');
 const SETTINGS = join(USERDATA, 'settings.json');
 const DB_PATH = join(USERDATA, 'statev2.sqlite');
@@ -37,7 +39,7 @@ const H = 3_600_000, DAY = 24 * H;
 const MTIME_SLACK = 1.5 * DAY;
 const MAX_DAYS = 90;
 const TTL = 45_000;
-const MAX_READ = 256 * 1024 * 1024;
+const READ_CHUNK = 1024 * 1024;
 const LABEL: Record<Kind, string> = { claude: 'Claude Code', codex: 'Codex', grok: 'Grok Build', cursor: 'Cursor', opencode: 'OpenCode', antigravity: 'Antigravity' };
 const RANGES: Record<string, number> = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 };
 const PROJECT_ALIASES: Record<string, string> = { 'No project': 'Scratch' };
@@ -153,8 +155,8 @@ function loadPricing(): Pricing {
   return pricing;
 }
 
-function rateOf(p: Pricing, model: string): Rate | null {
-  const o = p.overrides.get(model.trim());
+function rateOf(p: Pricing, model: string, useOverrides = true): Rate | null {
+  const o = useOverrides ? p.overrides.get(model.trim()) : undefined;
   if (o) return o;
   let r = p.resolved.get(model);
   if (r === undefined) {
@@ -173,9 +175,10 @@ const byCategory = (t: Tokens, r: TokenRates) => ({ input: t.u * r.input, cacheR
 const sum4 = (c: { input: number; cacheRead: number; cacheWrite: number; output: number }) => c.input + c.cacheRead + c.cacheWrite + c.output;
 const at = (r: Rate, s: Speed): TokenRates => (s === 'standard' ? null : r[s]) ?? r;
 
-function price(p: Pricing, model: string, t: Tokens, speed: Speed, reported: number | null) {
-  const rate = rateOf(p, model);
-  const rep = p.overrides.has(model.trim()) ? null : reported;
+function price(p: Pricing, model: string, t: Tokens, speed: Speed, reported: number | null, rateModel?: string) {
+  const override = p.overrides.get(model.trim());
+  const rate = override ?? rateOf(p, rateModel ?? model, false);
+  const rep = override ? null : reported;
   if (!rate) return { cost: rep ?? 0, source: rep === null ? 'unpriced' : 'reported', cat: null, premium: 0, savings: 0 };
   const rates = at(rate, speed);
   const list = byCategory(t, rates);
@@ -195,26 +198,6 @@ function price(p: Pricing, model: string, t: Tokens, speed: Speed, reported: num
 
 // ---------------------------------------------------------------- transcript records
 
-interface Rec extends Tokens {
-  ts: number;
-  model: string;
-  session: string;
-  key: string | null;
-  cost: number | null;
-  speed: Speed;
-}
-
-interface CodexState {
-  model: string;
-  speed: Speed;
-  sessionId: string;
-  lastUsageSignature: string | null;
-  sawSessionMeta: boolean;
-  suppressingForkCopies: boolean;
-  forkCopyAnchorMs: number;
-}
-
-const codexInitial = (): CodexState => ({ model: '', speed: 'standard', sessionId: '', lastUsageSignature: null, sawSessionMeta: false, suppressingForkCopies: false, forkCopyAnchorMs: 0 });
 const tsOf = (v: unknown) => (typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? Date.parse(v) : null);
 const obj = (v: unknown) => (v && typeof v === 'object' ? (v as Record<string, unknown>) : null);
 
@@ -226,7 +209,7 @@ function parseClaude(line: string): Rec | null {
   const usage = obj(msg?.usage);
   const ts = tsOf(rec.timestamp);
   const model = str(msg?.model);
-  if (!msg || !usage || ts === null || !model) return null;
+  if (!msg || !usage || ts === null || !model || model === '<synthetic>') return null;
   const id = typeof msg.id === 'string' ? msg.id : null;
   const req = typeof rec.requestId === 'string' ? rec.requestId : null;
   return {
@@ -244,55 +227,6 @@ function parseClaude(line: string): Rec | null {
   };
 }
 
-/** Codex token_count events carry no model or tier: both come from earlier lines, kept in `st`. */
-function parseCodex(line: string, st: CodexState): Rec | null {
-  if (!line.includes('"token_count"') && !line.includes('"turn_context"') && !line.includes('"thread_settings_applied"') && !line.includes('"session_meta"')) return null;
-  const rec = obj(parse(line));
-  const p = obj(rec?.payload);
-  if (!rec || !p) return null;
-  if (rec.type === 'session_meta') {
-    if (st.sawSessionMeta) return null;
-    st.sawSessionMeta = true;
-    const id = p.id ?? p.session_id;
-    if (typeof id === 'string') st.sessionId = id;
-    const metaTs = tsOf(rec.timestamp);
-    const spawn = obj(obj(obj(p.source)?.subagent)?.thread_spawn);
-    if (metaTs !== null && (typeof p.forked_from_id === 'string' || typeof spawn?.parent_thread_id === 'string')) {
-      st.suppressingForkCopies = true;
-      st.forkCopyAnchorMs = metaTs;
-    }
-    return null;
-  }
-  if (rec.type === 'turn_context') {
-    if (typeof p.model === 'string') st.model = p.model;
-    return null;
-  }
-  if (p.type === 'thread_settings_applied') {
-    const s = obj(p.thread_settings);
-    if (s) st.speed = s.service_tier === 'priority' || s.service_tier === 'fast' ? 'fast' : s.service_tier === 'ultrafast' ? 'ultrafast' : 'standard';
-    return null;
-  }
-  if (p.type !== 'token_count') return null;
-  const last = obj(obj(p.info)?.last_token_usage);
-  const ts = tsOf(rec.timestamp);
-  if (!last || ts === null || !st.model) return null;
-  const sig = JSON.stringify(last);
-  if (sig === st.lastUsageSignature) return null;
-  st.lastUsageSignature = sig;
-  if (st.suppressingForkCopies) {
-    // a fork opens with the parent's history re-stamped in one burst
-    if (ts - st.forkCopyAnchorMs < 1000) {
-      st.forkCopyAnchorMs = ts;
-      return null;
-    }
-    st.suppressingForkCopies = false;
-  }
-  const input = count(last.input_tokens), c = count(last.cached_input_tokens), w = count(last.cache_write_input_tokens), o = count(last.output_tokens);
-  const u = Math.max(0, input - c - w);
-  if (u + c + w + o === 0) return null;
-  return { ts, model: st.model, session: st.sessionId, u, c, w, o, r: Math.min(o, count(last.reasoning_output_tokens)), key: null, cost: null, speed: st.speed };
-}
-
 interface FileState {
   provider: Kind;
   size: number;
@@ -301,77 +235,122 @@ interface FileState {
   state: CodexState | null;
   records: Rec[];
   live: boolean;
+  guardLength: number;
+  guardHash: number;
+  tail: number;
 }
 
-/** Parses complete lines from `offset` on; returns the records and the offset after the last newline. */
-async function readFrom(path: string, provider: Kind, offset: number, state: CodexState | null, size: number) {
-  const out: Rec[] = [];
-  const len = Math.min(size - offset, MAX_READ);
-  if (len <= 0) return { records: out, offset, state };
-  const fh = await openFile(path, 'r');
+/** Check the same 64-byte committed-prefix guard as T3 before resuming an append. */
+function fnv1a(bytes: Buffer) {
+  let hash = 0x811c9dc5;
+  for (const byte of bytes) { hash ^= byte; hash = Math.imul(hash, 0x01000193); }
+  return hash >>> 0;
+}
+async function guardAt(path: string, offset: number) {
+  const length = Math.min(64, offset);
+  if (!length) return { guardLength: 0, guardHash: 0 };
+  const file = await openFile(path, 'r');
   try {
-    const buf = Buffer.alloc(len);
-    const { bytesRead } = await fh.read(buf, 0, len, offset);
-    const st = provider === 'codex' ? { ...(state ?? codexInitial()) } : null;
-    let start = 0;
-    for (;;) {
-      const nl = buf.indexOf(10, start);
-      if (nl < 0 || nl >= bytesRead) break;
-      let end = nl;
-      if (end > start && buf[end - 1] === 13) end--;
-      if (end > start) {
-        const line = buf.toString('utf8', start, end);
-        const r = st ? parseCodex(line, st) : provider === 'claude' ? parseClaude(line) : null;
-        if (r) out.push(r);
+    const bytes = Buffer.alloc(length);
+    const read = await file.read(bytes, 0, length, offset - length);
+    if (read.bytesRead !== length) throw new Error('Usage file changed while reading its checkpoint.');
+    return { guardLength: length, guardHash: fnv1a(bytes) };
+  } finally { await file.close(); }
+}
+async function guardMatches(path: string, entry: { offset: number; guardLength: number; guardHash: number }) {
+  try {
+    if (entry.offset === 0) return entry.guardLength === 0;
+    if (entry.guardLength <= 0 || entry.guardLength > 64 || entry.guardLength > entry.offset) return false;
+    const actual = await guardAt(path, entry.offset);
+    return actual.guardLength === entry.guardLength && actual.guardHash === entry.guardHash;
+  } catch { return false; }
+}
+
+/** Stream through the complete snapshot, keeping only the unfinished line between chunks. */
+export async function readFrom(path: string, provider: Kind, offset: number, state: CodexState | null, size: number, chunkBytes = READ_CHUNK) {
+  if (!Number.isSafeInteger(chunkBytes) || chunkBytes <= 0) throw new Error('Invalid usage read chunk size.');
+  const records: Rec[] = [];
+  const parserState = provider === 'codex' ? { ...codexInitial(), ...state } : null;
+  const lineRecord = (line: string, st: CodexState | null) => st ? parseCodex(line, st) : provider === 'claude' ? parseClaude(line) : null;
+  const file = await openFile(path, 'r');
+  let position = offset, committed = offset, pending: Buffer = Buffer.alloc(0);
+  try {
+    const chunk = Buffer.alloc(Math.min(chunkBytes, Math.max(1, size - offset)));
+    while (position < size) {
+      const { bytesRead } = await file.read(chunk, 0, Math.min(chunk.length, size - position), position);
+      if (!bytesRead) throw new Error('Usage file changed before its snapshot was read completely.');
+      const base = position - pending.length;
+      const bytes = pending.length ? Buffer.concat([pending, chunk.subarray(0, bytesRead)]) : Buffer.from(chunk.subarray(0, bytesRead));
+      position += bytesRead;
+      let start = 0;
+      for (;;) {
+        const newline = bytes.indexOf(10, start);
+        if (newline < 0) break;
+        let end = newline;
+        if (end > start && bytes[end - 1] === 13) end--;
+        if (end > start) { const record = lineRecord(bytes.toString('utf8', start, end), parserState); if (record) records.push(record); }
+        start = newline + 1;
       }
-      start = nl + 1;
+      committed = base + start;
+      pending = Buffer.from(bytes.subarray(start));
     }
-    return { records: out, offset: offset + start, state: st };
-  } finally {
-    await fh.close();
-  }
+    let tail = 0;
+    if (pending.length) {
+      const record = lineRecord(pending.toString('utf8'), parserState ? { ...parserState } : null);
+      if (record) { records.push(record); tail = 1; }
+    }
+    return { records, offset: committed, state: parserState, tail };
+  } finally { await file.close(); }
 }
 
 // ---------------------------------------------------------------- T3's scan cache
 
-interface CachedFile { provider: Kind; size: number; mtime: number; offset: number; state: CodexState | null; records: Rec[]; tail: number }
-let scanCache: { mtime: number; files: Map<string, CachedFile> } | null = null;
-
+interface CachedFile { provider: Kind; size: number; mtime: number; offset: number; state: CodexState | null; records: Rec[]; tail: number; guardLength: number; guardHash: number; canResume: boolean }
+let scanCache: { key: string; version: number; mtime: number; files: Map<string, CachedFile> } | null = null;
 const SPEEDS: Speed[] = ['standard', 'fast', 'ultrafast'];
 
-function loadScanCache() {
-  let mtime = 0;
-  try {
-    mtime = statSync(SCAN_CACHE).mtimeMs;
-  } catch {
-    scanCache = { mtime: 0, files: new Map() };
-    return scanCache;
-  }
-  if (scanCache && scanCache.mtime === mtime) return scanCache;
-  type Doc5 = { version?: number; models?: string[]; sessions?: string[]; files?: Record<string, { s: number; m: number; p: Kind; r: unknown[][]; t: unknown[][]; o: number; cs: CodexState | null }> };
-  const doc = parse<Doc5>(readText(SCAN_CACHE));
-  const files = new Map<string, CachedFile>();
-  if (doc && (doc.version ?? 0) >= 4 && Array.isArray(doc.models) && Array.isArray(doc.sessions) && doc.files) {
-    const models = doc.models, sessions = doc.sessions;
-    const decode = (rows: unknown[][]) => {
+/** Prefer the newest supported authoritative cache; never merge overlapping cache generations. */
+export function loadScanCache(userdata = USERDATA) {
+  for (const candidate of CACHE_VERSIONS) {
+    const path = join(userdata, `usage-scan-cache-v${candidate}.json`);
+    let info;
+    try { info = statSync(path); } catch { continue; }
+    const key = `${path}:${info.mtimeMs}:${info.size}`;
+    if (scanCache?.key === key) return scanCache;
+    const doc = parse<{ version?: number; models?: unknown[]; sessions?: unknown[]; files?: Record<string, any> }>(readText(path));
+    if (!doc || !Number.isInteger(doc.version) || doc.version! < 4 || doc.version! > 9 || !Array.isArray(doc.models) || !Array.isArray(doc.sessions) || !doc.files || typeof doc.files !== 'object') continue;
+    if (!doc.models.every((v) => typeof v === 'string') || !doc.sessions.every((v) => typeof v === 'string')) continue;
+    const models = doc.models as string[], sessions = doc.sessions as string[], version = doc.version!;
+    const files = new Map<string, CachedFile>();
+    const decode = (rows: unknown[], provider: Kind): Rec[] | null => {
       const out: Rec[] = [];
       for (const row of rows) {
-        const [ts, mi, si, u, c, w, o, r, key, cost, sp] = row as [number, number, number, number, number, number, number, number, string | null, number | null, number];
-        const model = models[mi];
-        if (typeof ts !== 'number' || model === undefined) continue;
-        out.push({ ts, model, session: sessions[si] ?? '', u, c, w, o, r, key: typeof key === 'string' ? key : null, cost: typeof cost === 'number' ? cost : null, speed: SPEEDS[sp] ?? 'standard' });
+        if (!Array.isArray(row) || row.length < 11) return null;
+        const [ts, mi, si, u, c, w, o, r, key, cost, sp, rateIndex] = row;
+        if (!Number.isFinite(ts) || !Number.isInteger(mi) || typeof models[mi] !== 'string' || ![u, c, w, o, r].every((v) => Number.isSafeInteger(v) && v >= 0) || !Number.isInteger(sp) || !SPEEDS[sp]) return null;
+        if (provider === 'claude' && models[mi] === '<synthetic>') continue;
+        const rateModel = rateIndex == null ? undefined : models[rateIndex];
+        if (rateIndex != null && (!Number.isInteger(rateIndex) || rateModel === undefined)) return null;
+        out.push({ ts, model: models[mi], session: sessions[si] ?? '', u, c, w, o, r, key: typeof key === 'string' ? key : null, cost: typeof cost === 'number' && Number.isFinite(cost) ? cost : null, speed: SPEEDS[sp], ...(rateModel !== undefined ? { rateModel } : {}) });
       }
       return out;
     };
-    for (const [path, e] of Object.entries(doc.files)) {
-      if (!e || typeof e.s !== 'number' || !e.p || !Array.isArray(e.r)) continue;
-      const tail = Array.isArray(e.t) ? decode(e.t) : [];
-      files.set(path, { provider: e.p, size: e.s, mtime: e.m, offset: e.o ?? e.s, state: e.cs ?? null, records: [...decode(e.r), ...tail], tail: tail.length });
+    for (const [path, entry] of Object.entries(doc.files)) {
+      if (!entry || !Number.isSafeInteger(entry.s) || entry.s < -1 || !Number.isFinite(entry.m) || typeof entry.p !== 'string' || !Array.isArray(entry.r)) continue;
+      const committed = decode(entry.r, entry.p), tail = decode(Array.isArray(entry.t) ? entry.t : [], entry.p);
+      if (!committed || !tail) continue;
+      const offset = Number.isSafeInteger(entry.o) && entry.o >= 0 ? entry.o : entry.s;
+      const guardLength = Number.isSafeInteger(entry.gl) && entry.gl >= 0 && entry.gl <= 64 && entry.gl <= offset ? entry.gl : -1;
+      const guardHash = Number.isFinite(entry.gh) ? entry.gh : 0;
+      const legacyCodex = entry.p === 'codex' && (version < 8 || (version < 9 && (entry.mr ?? 0) > 0));
+      const state = entry.p === 'codex' && isCodexState(entry.cs) ? { ...entry.cs } : null;
+      files.set(path, { provider: entry.p, size: entry.s, mtime: entry.m, offset, state, records: [...committed, ...tail], tail: tail.length, guardLength, guardHash, canResume: !legacyCodex && (entry.p !== 'codex' || state !== null) && version >= 6 && guardLength >= 0 && entry.s >= 0 && offset <= entry.s });
     }
+    live.clear();
+    return scanCache = { key, version, mtime: info.mtimeMs, files };
   }
-  scanCache = { mtime, files };
   live.clear();
-  return scanCache;
+  return scanCache = { key: '', version: 0, mtime: 0, files: new Map() };
 }
 
 // ---------------------------------------------------------------- file walk
@@ -414,10 +393,10 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
   }));
 }
 
-interface Corpus { files: { path: string; provider: Kind; records: Rec[] }[]; liveFiles: number; cacheAt: number; scanMs: number }
+interface Corpus { files: { path: string; provider: Kind; records: Rec[] }[]; liveFiles: number; cacheAt: number; scanMs: number; cacheVersion: number; readFailures?: number }
 
 /** Every transcript record of the last ~90 days, file by file in T3's order (Claude first, then Codex, then the rest). */
-async function collect(): Promise<Corpus> {
+export async function collect(): Promise<Corpus> {
   const t0 = Date.now();
   const cache = loadScanCache();
   const sinceMs = Date.now() - MAX_DAYS * DAY - MTIME_SLACK;
@@ -432,49 +411,55 @@ async function collect(): Promise<Corpus> {
   const paths = [...kindOf.keys()].sort((a, b) => order.indexOf(kindOf.get(a)!) - order.indexOf(kindOf.get(b)!));
 
   const result = new Map<string, FileState>();
+  let readFailures = 0, uncachedFailures = 0;
   await pool(paths, 16, async (path) => {
     const provider = kindOf.get(path)!;
     const cached = cache.files.get(path);
     let st: { size: number; mtimeMs: number } | null = null;
     try {
       st = await stat(path);
-    } catch {
-      // deleted transcript: T3 keeps its usage until retention expires
+    } catch (error) {
+      // Deleted transcripts are retained history; unreadable ones are incomplete scans.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') { readFailures++; if (!cached) uncachedFailures++; }
     }
     if (!st) {
-      if (cached && cached.mtime >= sinceMs) result.set(path, { provider, size: cached.size, mtime: cached.mtime, offset: cached.offset, state: cached.state, records: cached.records, live: false });
+      if (cached && cached.mtime >= sinceMs) result.set(path, { provider, size: cached.size, mtime: cached.mtime, offset: cached.offset, state: cached.state, records: cached.records, live: false, guardLength: cached.guardLength, guardHash: cached.guardHash, tail: cached.tail });
       return;
     }
     if (st.mtimeMs < sinceMs) return;
     const prev = live.get(path);
     if (prev && prev.size === st.size && prev.mtime === st.mtimeMs) return void result.set(path, prev);
     if (provider !== 'claude' && provider !== 'codex') {
-      if (cached) result.set(path, { provider, size: cached.size, mtime: cached.mtime, offset: cached.offset, state: cached.state, records: cached.records, live: false });
+      if (cached) result.set(path, { provider, size: cached.size, mtime: cached.mtime, offset: cached.offset, state: cached.state, records: cached.records, live: false, guardLength: cached.guardLength, guardHash: cached.guardHash, tail: cached.tail });
       return;
     }
     let base: FileState;
-    if (prev && st.size > prev.size) base = prev;
-    else if (cached && st.size >= cached.size) {
+    if (prev && (st.size > prev.size || (st.size === prev.size && st.mtimeMs === prev.mtime)) && await guardMatches(path, prev)) base = { ...prev, records: prev.records.slice(0, prev.records.length - prev.tail), tail: 0 };
+    else if (cached && cached.canResume && (st.size > cached.size || (st.size === cached.size && st.mtimeMs === cached.mtime)) && await guardMatches(path, cached)) {
       // resume where T3 stopped; its tail records get re-read from the offset
-      base = { provider, size: cached.size, mtime: cached.mtime, offset: cached.offset, state: cached.state, records: cached.records.slice(0, cached.records.length - cached.tail), live: false };
+      base = { provider, size: cached.size, mtime: cached.mtime, offset: cached.offset, state: cached.state, records: cached.records.slice(0, cached.records.length - cached.tail), live: false, guardLength: cached.guardLength, guardHash: cached.guardHash, tail: 0 };
       if (st.size === cached.size && cached.tail === 0) {
         base.mtime = st.mtimeMs;
         live.set(path, base);
         return void result.set(path, base);
       }
-    } else base = { provider, size: 0, mtime: 0, offset: 0, state: null, records: [], live: true };
+    } else base = { provider, size: 0, mtime: 0, offset: 0, state: null, records: [], live: true, guardLength: 0, guardHash: 0, tail: 0 };
     try {
       const r = await readFrom(path, provider, base.offset, base.state, st.size);
-      const next: FileState = { provider, size: st.size, mtime: st.mtimeMs, offset: r.offset, state: r.state, records: r.records.length ? [...base.records, ...r.records] : base.records, live: base.live || r.records.length > 0 };
+      const next: FileState = { provider, size: st.size, mtime: st.mtimeMs, offset: r.offset, state: r.state, records: r.records.length ? [...base.records, ...r.records] : base.records, live: base.live || r.records.length > 0, tail: r.tail, ...await guardAt(path, r.offset) };
       live.set(path, next);
       result.set(path, next);
     } catch {
-      if (cached) result.set(path, { provider, size: cached.size, mtime: cached.mtime, offset: cached.offset, state: cached.state, records: cached.records, live: false });
+      readFailures++;
+      if (!cached) uncachedFailures++;
+      if (cached) result.set(path, { provider, size: cached.size, mtime: cached.mtime, offset: cached.offset, state: cached.state, records: cached.records, live: false, guardLength: cached.guardLength, guardHash: cached.guardHash, tail: cached.tail });
     }
   });
+  if (uncachedFailures) throw new Error(`Could not read ${uncachedFailures} usage files; refusing to return incomplete totals.`);
   for (const p of [...live.keys()]) if (!result.has(p)) live.delete(p);
   const files = paths.filter((p) => result.has(p)).map((p) => ({ path: p, provider: result.get(p)!.provider, records: result.get(p)!.records }));
-  return { files, liveFiles: paths.filter((p) => result.get(p)?.live).length, cacheAt: cache.mtime, scanMs: Date.now() - t0 };
+  return { files, liveFiles: paths.filter((p) => result.get(p)?.live).length, cacheAt: cache.mtime, scanMs: Date.now() - t0, cacheVersion: cache.version, readFailures };
 }
 
 // ---------------------------------------------------------------- aggregation (as T3's UsageAggregator + client merge)
@@ -502,10 +487,9 @@ function dayFormatter(tz: string) {
   };
 }
 
-function aggregate(corpus: Corpus, range: string, tz: string) {
+export function aggregate(corpus: Corpus, range: string, tz: string, now = Date.now()) {
   const days = RANGES[range] ?? 30;
   const hourly = days === 1;
-  const now = Date.now();
   const toDay = dayFormatter(tz);
   const today = toDay(now);
   const [y, m, d] = today.split('-').map(Number);
@@ -562,8 +546,9 @@ function aggregate(corpus: Corpus, range: string, tz: string) {
         if (day < sinceDay || day > today) continue;
         bucket = day;
       }
-      const model = p.aliases.get(rec0.model) ?? rec0.model;
-      const pr = price(p, model, rec0, rec0.speed, rec0.cost);
+      const alias = p.aliases.get(rec0.model);
+      const model = alias ?? rec0.model;
+      const pr = price(p, model, rec0, rec0.speed, rec0.cost, alias === undefined ? rec0.rateModel : undefined);
       const tokens = rec0.u + rec0.c + rec0.w + rec0.o;
       tot.costUsd += pr.cost;
       tot.uncached += rec0.u;
@@ -624,7 +609,7 @@ function aggregate(corpus: Corpus, range: string, tz: string) {
   const providers = [...prov.entries()]
     .map(([provider, v]) => ({
       provider,
-      label: LABEL[provider],
+      label: LABEL[provider] ?? provider,
       costUsd: v.costUsd,
       totalTokens: v.totalTokens,
       records: v.records,
@@ -846,6 +831,8 @@ export function t3Costs(): Plugin {
           readAt: new Date().toISOString(),
           cacheAt: c.cacheAt ? new Date(c.cacheAt).toISOString() : null,
           liveFiles: c.liveFiles,
+          cacheVersion: c.cacheVersion,
+          readFailures: c.readFailures ?? 0,
           scannedFiles: c.files.length,
           scanMs: c.scanMs,
           pricing: { fetchedAt: pr.fetchedAt ? new Date(pr.fetchedAt).toISOString() : null, knownModels: pr.table.size },
