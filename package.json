@@ -58,7 +58,7 @@
     "test:github": "node --experimental-strip-types scripts/github-login-test.mjs",
     "test:github:config": "node scripts/github-config-test.mjs",
     "test:onboarding": "npm run test:onboarding:recovery && npm run test:onboarding:a11y && npm run test:tour && npm run test:onboarding:demo",
-    "test:cloud": "node scripts/cloud-permissions-test.mjs",
+    "test:cloud": "node scripts/cloud-permissions-test.mjs && node scripts/cloud-identity-test.mjs && node scripts/cloud-activity-test.mjs && node scripts/cloud-humans-test.mjs",
     "cloud:dev": "wrangler dev --local --config cloud/wrangler.jsonc",
     "cloud:migrate:local": "wrangler d1 migrations apply office-permissions-local --local --config cloud/wrangler.jsonc"
   },
@@ -74,6 +74,7 @@
     "@cloudflare/workers-types": "5.20261102.1",
     "@types/node": "^26.6.5",
     "@types/three": "^0.186.0",
+    "esbuild": "0.28.2",
     "miniflare": "5.20261102.0-beta",
     "playwright": "^1.64.0",
     "typescript": "^7.0.2",

@@ -1,0 +1,13 @@
+CREATE TABLE human_profiles(user TEXT PRIMARY KEY REFERENCES users(id),name TEXT NOT NULL,color TEXT NOT NULL,hair TEXT NOT NULL,availability TEXT NOT NULL);
+CREATE TABLE human_rooms(office TEXT PRIMARY KEY REFERENCES offices(id),open INTEGER NOT NULL,dnd INTEGER NOT NULL);
+CREATE TABLE human_admissions(office TEXT NOT NULL,user TEXT NOT NULL,history INTEGER NOT NULL,PRIMARY KEY(office,user),FOREIGN KEY(office,user) REFERENCES grants(office,user) ON DELETE CASCADE);
+CREATE TABLE human_requests(id TEXT PRIMARY KEY,office TEXT NOT NULL,user TEXT NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,status TEXT NOT NULL,FOREIGN KEY(office,user) REFERENCES grants(office,user) ON DELETE CASCADE);
+CREATE TABLE human_cooldown(office TEXT NOT NULL,user TEXT NOT NULL,last INTEGER NOT NULL,PRIMARY KEY(office,user));
+CREATE TABLE human_presence(user TEXT PRIMARY KEY REFERENCES users(id),office TEXT NOT NULL REFERENCES offices(id),x REAL NOT NULL,z REAL NOT NULL,updated INTEGER NOT NULL,lease TEXT NOT NULL);
+CREATE TABLE human_messages(seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT NOT NULL UNIQUE,office TEXT NOT NULL REFERENCES offices(id),user TEXT NOT NULL REFERENCES users(id),name TEXT NOT NULL,body TEXT NOT NULL,created INTEGER NOT NULL,client TEXT NOT NULL,UNIQUE(user,client));
+CREATE INDEX human_messages_room ON human_messages(office,seq);
+CREATE TABLE human_receipts(user TEXT NOT NULL,client TEXT NOT NULL,office TEXT NOT NULL,id TEXT NOT NULL,created INTEGER NOT NULL,PRIMARY KEY(user,client));
+CREATE TRIGGER clear_human_presence_on_revoke AFTER DELETE ON grants BEGIN DELETE FROM human_presence WHERE office=OLD.office AND user=OLD.user; END;
+CREATE TRIGGER clear_human_presence_on_logout AFTER DELETE ON sessions WHEN NOT EXISTS(SELECT 1 FROM sessions WHERE user=OLD.user AND expires>unixepoch()*1000) BEGIN DELETE FROM human_presence WHERE user=OLD.user; END;
+CREATE TRIGGER clear_human_guests_on_close AFTER UPDATE OF open ON human_rooms WHEN NEW.open=0 BEGIN DELETE FROM human_admissions WHERE office=NEW.office; DELETE FROM human_presence WHERE office=NEW.office AND user<>(SELECT owner FROM offices WHERE id=NEW.office); UPDATE human_requests SET status='declined' WHERE office=NEW.office AND status='pending'; END;
+CREATE TRIGGER decline_requests_on_dnd AFTER UPDATE OF dnd ON human_rooms WHEN NEW.dnd=1 BEGIN UPDATE human_requests SET status='declined' WHERE office=NEW.office AND status='pending'; END;

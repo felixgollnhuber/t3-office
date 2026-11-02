@@ -2,7 +2,9 @@
 export type GitHubIdentity={provider:'github';subject:string;login:string;displayName:string};
 export type GitHubIdentityConfig={clientId:string;clientSecret:string;callbackUrl:string};
 type Transport=(url:string,init:RequestInit)=>Promise<Response>;
-type Pending={binding:string;verifier:string;expiresAt:number};
+export type GitHubChallenge={binding:string;verifier:string;expiresAt:number};
+type Pending=GitHubChallenge;
+export interface GitHubChallengeStore {reserve(state:string,challenge:GitHubChallenge,now:number):Promise<boolean>;claim(state:string,binding:string,now:number):Promise<GitHubChallenge|null>}
 const AUTHORIZE='https://github.com/login/oauth/authorize',TOKEN='https://github.com/login/oauth/access_token',USER='https://api.github.com/user';
 const MAX_PENDING=100,TTL=10*60_000,DEADLINE=8000;
 export class IdentityError extends Error{code:'configuration'|'state'|'capacity'|'provider';constructor(code:'configuration'|'state'|'capacity'|'provider'){super(code==='configuration'?'GitHub sign-in is not configured safely.':code==='state'?'GitHub sign-in expired or could not be verified. Start again.':code==='capacity'?'Too many sign-in attempts. Try again later.':'GitHub sign-in is unavailable. Try again.');this.code=code;}}
@@ -26,22 +28,23 @@ async function json(response:Response,limit:number,signal:AbortSignal){
  const buffer=new Uint8Array(size);let at=0;for(const chunk of chunks){buffer.set(chunk,at);at+=chunk.length;}
  try{const result=JSON.parse(new TextDecoder().decode(buffer));if(!result||typeof result!=='object'||Array.isArray(result))throw 0;return result as Record<string,unknown>;}catch{throw new IdentityError('provider');}
 }
-/** Pending challenges are deliberately ephemeral: a restart makes unfinished login start over safely.
+/** Default in-memory challenges are ephemeral; an optional store supplies atomic durable reserve/claim.
+ * Store implementations must enforce capacity, browser binding, expiry and one-use claims.
  * Integration must set browserToken as a 10-minute HttpOnly, SameSite=Lax cookie, Secure on HTTPS.
  * Keep tokens and provider responses out of logs; issue a separate local session only after complete().
  */
 export class GitHubIdentityBroker{
- private config:Readonly<GitHubIdentityConfig>;private pending=new Map<string,Pending>();private transport:Transport;private now:()=>number;
- constructor(config:GitHubIdentityConfig,transport:Transport=(url,init)=>fetch(url,init),now:()=>number=Date.now){this.config=configuration(config);this.transport=transport;this.now=now;}
+ private config:Readonly<GitHubIdentityConfig>;private pending=new Map<string,Pending>();private transport:Transport;private now:()=>number;private store?:GitHubChallengeStore;
+ constructor(config:GitHubIdentityConfig,transport:Transport=(url,init)=>fetch(url,init),now:()=>number=Date.now,store?:GitHubChallengeStore){this.store=store;this.config=configuration(config);this.transport=transport;this.now=now;}
  get callbackUrl(){return this.config.callbackUrl;}
  private prune(){for(const[key,value]of this.pending)if(value.expiresAt<=this.now())this.pending.delete(key);}
  async begin(){
-  this.prune();if(this.pending.size>=MAX_PENDING)throw new IdentityError('capacity');
+  this.prune();if(!this.store&&this.pending.size>=MAX_PENDING)throw new IdentityError('capacity');
   const state=random(),browserToken=random(),verifier=random(),expiresAt=this.now()+TTL;
   // Reserve before awaiting crypto so concurrent begins cannot exceed the cap.
-  const entry={binding:'',verifier,expiresAt};this.pending.set(state,entry);
-  try{entry.binding=await digest(browserToken);const challenge=await digest(verifier);const url=new URL(AUTHORIZE);url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.config.callbackUrl,scope:'',state,code_challenge:challenge,code_challenge_method:'S256',allow_signup:'false'}).toString();return{authorizationUrl:url.href,browserToken,expiresAt};}
-  catch{this.pending.delete(state);throw new IdentityError('provider');}
+  const entry={binding:'',verifier,expiresAt};if(!this.store)this.pending.set(state,entry);
+  try{entry.binding=await digest(browserToken);const challenge=await digest(verifier);if(this.store&&!await this.store.reserve(state,entry,this.now()))throw new IdentityError('capacity');const url=new URL(AUTHORIZE);url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.config.callbackUrl,scope:'',state,code_challenge:challenge,code_challenge_method:'S256',allow_signup:'false'}).toString();return{authorizationUrl:url.href,browserToken,expiresAt};}
+  catch(error){this.pending.delete(state);if(error instanceof IdentityError)throw error;throw new IdentityError('provider');}
  }
  private async request(url:string,init:RequestInit,limit:number){
   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),DEADLINE);
@@ -51,6 +54,7 @@ export class GitHubIdentityBroker{
  }
  private async claim(input:{state:unknown;browserToken:unknown}){
   const {state,browserToken}=input;this.prune();if(!opaque(state)||!opaque(browserToken))throw new IdentityError('state');
+  if(this.store){const entry=await this.store.claim(state,await digest(browserToken),this.now());if(!entry)throw new IdentityError('state');return entry;}
   const entry=this.pending.get(state);if(!entry||!entry.binding||!equal(entry.binding,await digest(browserToken)))throw new IdentityError('state');
   // Claim after async digest: callback/cancellation races cannot spend one challenge twice.
   if(this.pending.get(state)!==entry||entry.expiresAt<=this.now())throw new IdentityError('state');this.pending.delete(state);return entry;
@@ -60,9 +64,9 @@ export class GitHubIdentityBroker{
   const {state,browserToken,code}=input;if(typeof code!=='string'||!code||code.length>512||/[^\x21-\x7e]/.test(code))throw new IdentityError('state');
   const entry=await this.claim({state,browserToken});
   try{
-   const token=await this.request(TOKEN,{method:'POST',redirect:'error',headers:{Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:this.config.clientId,client_secret:this.config.clientSecret,code,redirect_uri:this.config.callbackUrl,code_verifier:entry.verifier})},16_384);
+   const token=await this.request(TOKEN,{method:'POST',redirect:'manual',headers:{Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:this.config.clientId,client_secret:this.config.clientSecret,code,redirect_uri:this.config.callbackUrl,code_verifier:entry.verifier})},16_384);
    if(typeof token.access_token!=='string'||!token.access_token||token.access_token.length>2048||/[\s\u0000-\u001f\u007f]/.test(token.access_token)||typeof token.token_type!=='string'||token.token_type.toLowerCase()!=='bearer')throw new IdentityError('provider');
-   const user=await this.request(USER,{method:'GET',redirect:'error',headers:{Accept:'application/vnd.github+json',Authorization:`Bearer ${token.access_token}`,'X-GitHub-Api-Version':'2026-03-10','User-Agent':'t3-office-identity'}},65_536);
+   const user=await this.request(USER,{method:'GET',redirect:'manual',headers:{Accept:'application/vnd.github+json',Authorization:`Bearer ${token.access_token}`,'X-GitHub-Api-Version':'2026-03-10','User-Agent':'t3-office-identity'}},65_536);
    if(typeof user.id!=='number'||!Number.isSafeInteger(user.id)||user.id<=0||typeof user.login!=='string'||!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(user.login))throw new IdentityError('provider');
    const displayName=typeof user.name==='string'?user.name.replace(/[\u0000-\u001f\u007f]/g,'').trim().slice(0,60):'';
    return{provider:'github',subject:String(user.id),login:user.login,displayName:displayName||user.login};
